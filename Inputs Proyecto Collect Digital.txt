@@ -1,0 +1,5 @@
+Inputs:
+
+1. Cartera de los clientes (FBL5N) - SAP
+2. Relación de depósitos (FBL3N / PSA) - SAP
+3. Comprobante de pago de clientes (Remittances) HRC-Outlook-Websides.
