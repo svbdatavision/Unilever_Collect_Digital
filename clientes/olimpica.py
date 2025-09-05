@@ -210,6 +210,21 @@ def procesar():
     ws["H2"].fill = amarillo
     ws["H2"].font = letra_negra
 
+    
+    # --- Ajustar ancho de columnas automáticamente ---
+    for col in ws.columns:
+        max_length = 0
+        col_letter = col[0].column_letter  # obtener letra de la columna
+        for cell in col:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = (max_length + 2)  # margen extra
+        ws.column_dimensions[col_letter].width = adjusted_width
+    
+    
     wb.save(ruta_salida)
     print(f"Archivo exportado correctamente: {ruta_salida}")
 

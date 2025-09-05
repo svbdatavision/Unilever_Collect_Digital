@@ -7,7 +7,7 @@ from openpyxl.styles import Alignment, PatternFill, Font
 def procesar():
     # --- Cargar Remittance ---
     remittance = pd.read_excel(
-        "Remittance_FARMATODO.xlsx",
+        "Remittance.xlsx",
         skiprows=6,
         nrows=20,
         header=[0, 1]
@@ -63,7 +63,7 @@ def procesar():
 
     # --- Cargar FBL5N ---
     FBL5N = pd.read_excel(
-        "FBL5N_FARMATODO.xlsx",
+        "FBL5N.xlsx",
         sheet_name="Sheet1",
         usecols=["Document Type", "Reference", "Amount in local currency", "Reason code", "Document Number", "Text"]
     )
@@ -137,11 +137,11 @@ def procesar():
     hrc_template = hrc_template[columnas_finales]
 
     # --- Datos dinámicos ---
-    wb_rem = load_workbook("Remittance_FARMATODO.xlsx", data_only=True)
+    wb_rem = load_workbook("Remittance.xlsx", data_only=True)
     ws_rem = wb_rem.active  
     numero_orden = ws_rem["B7"].value
 
-    fbl5n = pd.read_excel("FBL5N_FARMATODO.xlsx", usecols=["Customer", "Name 1"], nrows=1)
+    fbl5n = pd.read_excel("FBL5N.xlsx", usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
 
@@ -215,6 +215,19 @@ def procesar():
             if col != "Comentarios":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
+    # --- Ajustar ancho de columnas automáticamente ---
+    for col in ws.columns:
+        max_length = 0
+        col_letter = col[0].column_letter  # obtener letra de la columna
+        for cell in col:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = (max_length + 2)  # margen extra
+        ws.column_dimensions[col_letter].width = adjusted_width
+                
     wb.save(ruta_salida)
     print(f"Archivo exportado correctamente con formato: {ruta_salida}")
 
