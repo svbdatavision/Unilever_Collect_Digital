@@ -5,7 +5,21 @@ from openpyxl import load_workbook
 import os
 from .formato_template import exportar_template
 
+def _project_root():
+    """
+    Devuelve la carpeta raíz del proyecto:
+    - Si corre dentro de un .app -> la carpeta que contiene el .app
+    - Si corre como script -> la carpeta del archivo actual (../)
+    """
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)      # .../MyApp.app/Contents/MacOS
+        contents_dir = os.path.dirname(macos_dir)        # .../MyApp.app/Contents
+        app_bundle = os.path.dirname(contents_dir)       # .../MyApp.app
+        return os.path.dirname(app_bundle)               # carpeta que contiene el .app
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
 def procesar():
+    root = _project_root()
     # --- Rutas ---
     rutas = {
         "remittance": os.path.join("Archivos", "Remittance", "Remittance_olimpica.xlsx"),

@@ -1,3 +1,8 @@
+"""
+Interfaz principal para generar los templates HRC
+Funciona en Windows y Mac. Detecta automáticamente la carpeta de Excel relativa al ejecutable.
+"""
+
 import os
 import sys
 import tkinter as tk
@@ -11,15 +16,23 @@ import clientes.olimpica as olimpica
 
 # --- Función para obtener la ruta base ---
 def get_base_path():
-    if getattr(sys, 'frozen', False):
-        # Ejecutable creado por PyInstaller
-        return os.path.dirname(sys.executable)
-    else:
-        # Script normal
-        return os.path.abspath(".")
+    """
+    Devuelve la carpeta donde se encuentra el ejecutable o el script.
+    Permite que funcione tanto en PyInstaller como en modo script.
+    """
+    if getattr(sys, "frozen", False):
+        macos_dir   = os.path.dirname(sys.executable)        # .../MyApp.app/Contents/MacOS
+        contents_dir= os.path.dirname(macos_dir)            # .../MyApp.app/Contents
+        app_bundle  = os.path.dirname(contents_dir)         # .../MyApp.app
+        app_parent  = os.path.dirname(app_bundle)           # carpeta que contiene el .app (ej: /.../2.Automatizacion...)
+        return app_parent
+    return os.path.dirname(os.path.abspath(__file__))
 
 # --- Función para procesar el cliente ---
 def procesar_cliente(cliente):
+    """
+    Llama a la función procesar() del cliente seleccionado.
+    """
     if cliente == "Farmatodo":
         return farmatodo.procesar()
     elif cliente == "Olimpica":
@@ -29,6 +42,9 @@ def procesar_cliente(cliente):
 
 # --- Función del botón ---
 def ejecutar():
+    """
+    Ejecuta el proceso de generación del template y muestra mensajes de éxito/error.
+    """
     cliente = combo_cliente.get()
     if not cliente:
         messagebox.showwarning("Atención ⚠️", "Seleccione un cliente antes de continuar.")
@@ -36,8 +52,7 @@ def ejecutar():
 
     try:
         base_path = get_base_path()
-        # Cambiamos el directorio de trabajo temporal para los clientes
-        os.chdir(base_path)
+        os.chdir(base_path)  # Cambiamos el directorio para que los clientes lean los Excel
 
         resultado = procesar_cliente(cliente)
 
@@ -82,8 +97,8 @@ label = tk.Label(
 label.pack()
 
 # Dropdown de clientes
-clientes = ["Farmatodo", "Olimpica"]
-combo_cliente = ttk.Combobox(root, values=clientes, font=("Arial", 12), state="readonly")
+clientes_list = ["Farmatodo", "Olimpica"]
+combo_cliente = ttk.Combobox(root, values=clientes_list, font=("Arial", 12), state="readonly")
 combo_cliente.set("")  # sin valor por defecto
 combo_cliente.pack(pady=15)
 
