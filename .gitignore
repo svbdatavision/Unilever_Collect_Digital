@@ -1,3 +1,10 @@
-.ipynb_checkpoints/
-*.pyc
-__pycache__/
+# Ignorar carpetas de PyInstaller
+/dist/
+/build/
+/*.spec
+
+# Ignorar archivos temporales de macOS
+.DS_Store
+
+# Ignorar archivos de salida de Excel generados
+/Archivos/Template/
