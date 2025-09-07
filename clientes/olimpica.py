@@ -2,14 +2,22 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from openpyxl import load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, PatternFill, Font
-
+from copy import copy
+import os
 
 def procesar():
+    # --- Definir rutas como objetos ---
+    rutas = {
+        "remittance": os.path.join("Archivos", "Remittance", "Remittance_olimpica.xlsx"),
+        "fbl5n": os.path.join("Archivos", "Base_de_datos", "FBL5N_olimpica.xlsx"),
+        "fbl3n": os.path.join("Archivos", "Base_de_datos", "FBL3N.xlsx"),
+        "salida": os.path.join("Archivos", "Template", "Template_HRC_olimpica.xlsx")
+    }
+
     # --- Paso 1: Leer Remittance.xlsx ---
     remittance = pd.read_excel(
-        "Archivos/Remittance/Remittance_olimpica.xlsx",
+        rutas["remittance"],
         skiprows=25,
         nrows=65,
         usecols=["DOC", "No. Doc", "Total a Pagar"]
@@ -21,7 +29,6 @@ def procesar():
         "No. Doc": "Referencia / Factura",
         "Total a Pagar": "Importe de factura"
     })
-
     remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str[1:-3]
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "Factura Comercial": "Factura",
@@ -49,7 +56,7 @@ def procesar():
 
     # --- Paso 2: Leer FBL5N.xlsx ---
     FBL5N = pd.read_excel(
-        "Archivos/Base_de_datos/FBL5N_olimpica.xlsx",
+        rutas["fbl5n"],
         usecols=["Document Type", "Reference", "Amount in local currency"]
     )
     FBL5N = FBL5N[FBL5N["Document Type"] == "RV"]
@@ -59,19 +66,13 @@ def procesar():
     }).reset_index(drop=True)
 
     # --- Paso 3: Merge ---
-    hrc_template = pd.merge(
-        remittance,
-        FBL5N,
-        on="Referencia / Factura",
-        how="left"
-    )
+    hrc_template = pd.merge(remittance, FBL5N, on="Referencia / Factura", how="left")
 
     # Diferencias
     hrc_template["Diferencia"] = pd.NA
     hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
         hrc_template["importe_FBL5N"] - hrc_template["Importe de factura"]
     )
-
     diferencias = hrc_template[hrc_template["Diferencia"].notna() & (hrc_template["Diferencia"] != 0)].copy()
     registros_diferencias = pd.DataFrame({
         "Tipo de Documento": "Descuentos no asociados a FC",
@@ -86,7 +87,7 @@ def procesar():
     # --- Comentarios y Pago Neto ---
     hrc_template["Comentarios"] = np.where(
         hrc_template["Tipo de Documento"] == "Factura",
-        "",  # vacío si es Factura
+        "",
         np.where(
             hrc_template["Descuento"] == "MENORES VALORES",
             hrc_template["Descuento"],
@@ -95,50 +96,45 @@ def procesar():
     )
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
-    # Columnas finales
     columnas_finales = [
-        "Tipo de Documento",
-        "Referencia / Factura",
-        "Importe de factura",
-        "Descuento",
-        "Motivo del descuento",
-        "Pago Neto",
-        "Comentarios"
+        "Tipo de Documento", "Referencia / Factura", "Importe de factura",
+        "Descuento", "Motivo del descuento", "Pago Neto", "Comentarios"
     ]
     hrc_template = hrc_template[columnas_finales]
 
     # --- Paso 4: Datos dinámicos ---
-    # Numero de orden
-    wb_rem = load_workbook("Archivos/Remittance/Remittance_olimpica.xlsx", data_only=True)
+    wb_rem = load_workbook(rutas["remittance"], data_only=True)
     ws_rem = wb_rem.active
     celda = ws_rem["C10"].value
     numero_orden = celda.split("Orden de Pago:")[1].strip() if celda and "Orden de Pago:" in celda else ""
 
-    # Cliente
-    fbl5n = pd.read_excel("Archivos/Base_de_datos/FBL5N_olimpica.xlsx", usecols=["Customer", "Name 1"], nrows=1)
+    fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
 
-    # Fecha y valor de pago (FBL3N)
-    wb_fbl3n = load_workbook("Archivos/Base_de_datos/FBL3N.xlsx", data_only=True)
+    wb_fbl3n = load_workbook(rutas["fbl3n"], data_only=True)
     ws_fbl3n = wb_fbl3n.active
     fecha_dt = datetime.strptime(ws_fbl3n["K8"].value, "%d.%m.%Y")
     fecha_pago = fecha_dt.strftime("%-m/%-d/%y")
     importe_FBL3N = abs(float(ws_fbl3n["N8"].value.replace(".", "").replace(",", ".")))
 
-    # --- Paso 5: Sumas ---
     total_pago_neto = hrc_template["Pago Neto"].sum()
     diferencia = total_pago_neto - importe_FBL3N
 
-    # --- Paso 6: Exportar Excel ---
-    ruta_salida = "Archivos/Template/Template_HRC_olimpica.xlsx"
-    hrc_template.to_excel(ruta_salida, index=False, sheet_name="Template", startrow=17, startcol=2)
+    # --- Paso 5: Exportar Excel ---
+    with pd.ExcelWriter(rutas["salida"], engine="openpyxl") as writer:
+        hrc_template.to_excel(writer, index=False, sheet_name="Template", startrow=17, startcol=2)
 
-    # --- Paso 7: Formato con openpyxl ---
-    wb = load_workbook(ruta_salida)
-    ws = wb["Template"]
+    wb_salida = load_workbook(rutas["salida"])
+    ws = wb_salida["Template"]
 
-    # Titulos y cuadros
+    # --- Aplicar formatos hoja Template ---
+    azul_oscuro = PatternFill(start_color="002366", end_color="002366", fill_type="solid")
+    celeste_intenso = PatternFill(start_color="1E90FF", end_color="1E90FF", fill_type="solid")
+    amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    letra_blanca = Font(color="FFFFFF")
+    letra_negra = Font(color="000000")
+
     ws["C2"] = "Desglose de Pago"
     ws["C4"] = "CAMPOS NO EDITABLES"
     ws["G2"] = "REFERENCIA DE PAGO"
@@ -183,27 +179,16 @@ def procesar():
             if col != "Comentarios":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Formato colores de tabla
-    azul_oscuro = PatternFill(start_color="002366", end_color="002366", fill_type="solid")
-    celeste_intenso = PatternFill(start_color="1E90FF", end_color="1E90FF", fill_type="solid")
-    amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-
-    letra_blanca = Font(color="FFFFFF")
-    letra_negra = Font(color="000000")
-
     for cell in ["G2", "C6", "C7", "C8", "F6", "F7", "F8", "C11", "D11", "E11",
                  "F11", "C18", "D18", "E18", "F18", "G18", "H18", "I18"]:
         ws[cell].fill = azul_oscuro
         ws[cell].font = letra_blanca
-
     for cell in ["C4", "D6", "D7", "D8", "G6", "G7", "G8"]:
         ws[cell].fill = celeste_intenso
         ws[cell].font = letra_blanca
-
     ws["H2"].fill = amarillo
     ws["H2"].font = letra_negra
 
-    # Ajustar ancho de columnas automáticamente
     for col in ws.columns:
         max_length = 0
         col_letter = col[0].column_letter
@@ -213,10 +198,30 @@ def procesar():
                     max_length = max(max_length, len(str(cell.value)))
             except:
                 pass
-        adjusted_width = (max_length + 2)
-        ws.column_dimensions[col_letter].width = adjusted_width
+        ws.column_dimensions[col_letter].width = max_length + 2
 
-    wb.save(ruta_salida)
-    print(f"Archivo exportado correctamente: {ruta_salida}")
+    # --- Copiar hoja Remittance exacta ---
+    wb_remittance = load_workbook(rutas["remittance"], data_only=False)
+    ws_original = wb_remittance.active
+    ws_nueva = wb_salida.create_sheet("Remittance")
+
+    for row in ws_original.iter_rows():
+        for cell in row:
+            new_cell = ws_nueva.cell(row=cell.row, column=cell.column, value=cell.value)
+            if cell.has_style:
+                new_cell.font = copy(cell.font)
+                new_cell.fill = copy(cell.fill)
+                new_cell.border = copy(cell.border)
+                new_cell.alignment = copy(cell.alignment)
+                new_cell.number_format = copy(cell.number_format)
+                new_cell.protection = copy(cell.protection)
+
+    for col_letter, col_dim in ws_original.column_dimensions.items():
+        ws_nueva.column_dimensions[col_letter].width = col_dim.width
+    for row_idx, row_dim in ws_original.row_dimensions.items():
+        ws_nueva.row_dimensions[row_idx].height = row_dim.height
+
+    wb_salida.save(rutas["salida"])
+    print(f"Archivo exportado correctamente con formato: {rutas['salida']}")
 
     return hrc_template

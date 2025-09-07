@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from openpyxl import load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, PatternFill, Font
+from copy import copy
 
 def procesar():
     import os
@@ -13,15 +13,11 @@ def procesar():
     ruta_fbl5n = os.path.join("Archivos", "Base_de_datos", "FBL5N_farmatodo.xlsx")
     ruta_salida = os.path.join("Archivos", "Template", "Template_HRC_farmatodo.xlsx")
 
-    # --- Cargar Remittance ---
-    remittance = pd.read_excel(
-        ruta_remittance,
-        skiprows=6,
-        nrows=20,
-        header=[0, 1]
-    )
+    # --- Cargar Remittance original ---
+    remittance_import = pd.read_excel(ruta_remittance)
 
-    # Aplanar columnas multi-index
+    # --- Cargar y procesar remittance para template ---
+    remittance = pd.read_excel(ruta_remittance, skiprows=6, nrows=20, header=[0, 1])
     remittance.columns = [
         str(col[0]).strip() if "Unnamed" in str(col[1]) else str(col[1]).strip()
         for col in remittance.columns
@@ -159,20 +155,22 @@ def procesar():
     diferencia = total_pago_neto - importe_FBL3N
 
     # --- Exportar Excel ---
-    hrc_template.to_excel(ruta_salida, index=False, sheet_name="Template", startrow=17, startcol=2)
+    with pd.ExcelWriter(ruta_salida, engine="openpyxl") as writer:
+        hrc_template.to_excel(writer, index=False, sheet_name="Template", startrow=17, startcol=2)
 
-    # --- Abrir para aplicar formatos ---
-    wb = load_workbook(ruta_salida)
-    ws = wb["Template"]
+    wb_salida = load_workbook(ruta_salida)
 
-    # Estilos
+    # --- Formatos hoja Template ---
+    ws = wb_salida["Template"]
+
+    # Colores y fuentes
     azul_oscuro = PatternFill(start_color="002366", end_color="002366", fill_type="solid")
     celeste_intenso = PatternFill(start_color="1E90FF", end_color="1E90FF", fill_type="solid")
     amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     letra_blanca = Font(color="FFFFFF")
     letra_negra = Font(color="000000")
 
-    # --- Asignar valores a celdas ---
+    # Asignar valores
     ws["C2"] = "Desglose de Pago"
     ws["C4"] = "CAMPOS NO EDITABLES"
     ws["G2"] = "REFERENCIA DE PAGO"
@@ -196,7 +194,7 @@ def procesar():
     ws["F8"] = "DIFERENCIA"
     ws["G8"] = -diferencia
 
-    # --- Formato celdas ---
+    # Formato celdas
     for cell in ["G2","C6","C7","C8","F6","F7","F8","C11","D11","E11",
                  "F11","C18","D18","E18","F18","G18","H18","I18"]:
         ws[cell].fill = azul_oscuro
@@ -222,7 +220,7 @@ def procesar():
             if col != "Comentarios":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # --- Ajustar ancho de columnas automáticamente ---
+    # Ajustar ancho de columnas automáticamente
     for col in ws.columns:
         max_length = 0
         col_letter = col[0].column_letter
@@ -232,10 +230,31 @@ def procesar():
                     max_length = max(max_length, len(str(cell.value)))
             except:
                 pass
-        adjusted_width = (max_length + 2)
-        ws.column_dimensions[col_letter].width = adjusted_width
-                
-    wb.save(ruta_salida)
+        ws.column_dimensions[col_letter].width = max_length + 2
+
+    # --- Copiar hoja Remittance exacta ---
+    wb_remittance = load_workbook(ruta_remittance, data_only=False)
+    ws_original = wb_remittance.active
+    ws_nueva = wb_salida.create_sheet("Remittance")
+
+    for row in ws_original.iter_rows():
+        for cell in row:
+            new_cell = ws_nueva.cell(row=cell.row, column=cell.column, value=cell.value)
+            if cell.has_style:
+                new_cell.font = copy(cell.font)
+                new_cell.fill = copy(cell.fill)
+                new_cell.border = copy(cell.border)
+                new_cell.alignment = copy(cell.alignment)
+                new_cell.number_format = copy(cell.number_format)
+                new_cell.protection = copy(cell.protection)
+
+    for col_letter, col_dim in ws_original.column_dimensions.items():
+        ws_nueva.column_dimensions[col_letter].width = col_dim.width
+
+    for row_idx, row_dim in ws_original.row_dimensions.items():
+        ws_nueva.row_dimensions[row_idx].height = row_dim.height
+
+    wb_salida.save(ruta_salida)
     print(f"Archivo exportado correctamente con formato: {ruta_salida}")
 
     return hrc_template
