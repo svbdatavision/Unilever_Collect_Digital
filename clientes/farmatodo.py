@@ -2,12 +2,20 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, PatternFill, Font
 
 def procesar():
+    import os
+
+    # --- Definir rutas ---
+    ruta_remittance = os.path.join("Archivos", "Remittance", "Remittance_farmatodo.xlsx")
+    ruta_fbl5n = os.path.join("Archivos", "Base_de_datos", "FBL5N_farmatodo.xlsx")
+    ruta_salida = os.path.join("Archivos", "Template", "Template_HRC_farmatodo.xlsx")
+
     # --- Cargar Remittance ---
     remittance = pd.read_excel(
-        "Remittance.xlsx",
+        ruta_remittance,
         skiprows=6,
         nrows=20,
         header=[0, 1]
@@ -63,7 +71,7 @@ def procesar():
 
     # --- Cargar FBL5N ---
     FBL5N = pd.read_excel(
-        "FBL5N.xlsx",
+        ruta_fbl5n,
         sheet_name="Sheet1",
         usecols=["Document Type", "Reference", "Amount in local currency", "Reason code", "Document Number", "Text"]
     )
@@ -108,7 +116,7 @@ def procesar():
     # --- Comentarios y Pago Neto ---
     hrc_template["Comentarios"] = np.where(
         hrc_template["Tipo de Documento"] == "Factura",
-        "",  # vacío si es Factura
+        "",
         np.where(
             hrc_template["Descuento"] == "MENORES VALORES",
             hrc_template["Descuento"],
@@ -137,11 +145,11 @@ def procesar():
     hrc_template = hrc_template[columnas_finales]
 
     # --- Datos dinámicos ---
-    wb_rem = load_workbook("Remittance.xlsx", data_only=True)
+    wb_rem = load_workbook(ruta_remittance, data_only=True)
     ws_rem = wb_rem.active  
     numero_orden = ws_rem["B7"].value
 
-    fbl5n = pd.read_excel("FBL5N.xlsx", usecols=["Customer", "Name 1"], nrows=1)
+    fbl5n = pd.read_excel(ruta_fbl5n, usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
 
@@ -151,7 +159,6 @@ def procesar():
     diferencia = total_pago_neto - importe_FBL3N
 
     # --- Exportar Excel ---
-    ruta_salida = "Template_HRC_Farmatodo.xlsx"
     hrc_template.to_excel(ruta_salida, index=False, sheet_name="Template", startrow=17, startcol=2)
 
     # --- Abrir para aplicar formatos ---
@@ -218,14 +225,14 @@ def procesar():
     # --- Ajustar ancho de columnas automáticamente ---
     for col in ws.columns:
         max_length = 0
-        col_letter = col[0].column_letter  # obtener letra de la columna
+        col_letter = col[0].column_letter
         for cell in col:
             try:
                 if cell.value:
                     max_length = max(max_length, len(str(cell.value)))
             except:
                 pass
-        adjusted_width = (max_length + 2)  # margen extra
+        adjusted_width = (max_length + 2)
         ws.column_dimensions[col_letter].width = adjusted_width
                 
     wb.save(ruta_salida)

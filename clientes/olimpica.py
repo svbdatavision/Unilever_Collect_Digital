@@ -6,11 +6,10 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Alignment, PatternFill, Font
 
 
-
 def procesar():
     # --- Paso 1: Leer Remittance.xlsx ---
     remittance = pd.read_excel(
-        "Remittance.xlsx",
+        "Archivos/Remittance/Remittance_olimpica.xlsx",
         skiprows=25,
         nrows=65,
         usecols=["DOC", "No. Doc", "Total a Pagar"]
@@ -50,7 +49,7 @@ def procesar():
 
     # --- Paso 2: Leer FBL5N.xlsx ---
     FBL5N = pd.read_excel(
-        "FBL5N.xlsx",
+        "Archivos/Base_de_datos/FBL5N_olimpica.xlsx",
         usecols=["Document Type", "Reference", "Amount in local currency"]
     )
     FBL5N = FBL5N[FBL5N["Document Type"] == "RV"]
@@ -110,21 +109,21 @@ def procesar():
 
     # --- Paso 4: Datos dinámicos ---
     # Numero de orden
-    wb_rem = load_workbook("Remittance.xlsx", data_only=True)
+    wb_rem = load_workbook("Archivos/Remittance/Remittance_olimpica.xlsx", data_only=True)
     ws_rem = wb_rem.active
     celda = ws_rem["C10"].value
     numero_orden = celda.split("Orden de Pago:")[1].strip() if celda and "Orden de Pago:" in celda else ""
 
     # Cliente
-    fbl5n = pd.read_excel("FBL5N.xlsx", usecols=["Customer", "Name 1"], nrows=1)
+    fbl5n = pd.read_excel("Archivos/Base_de_datos/FBL5N_olimpica.xlsx", usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
 
     # Fecha y valor de pago (FBL3N)
-    wb_fbl3n = load_workbook("FBL3N.xlsx", data_only=True)
+    wb_fbl3n = load_workbook("Archivos/Base_de_datos/FBL3N.xlsx", data_only=True)
     ws_fbl3n = wb_fbl3n.active
     fecha_dt = datetime.strptime(ws_fbl3n["K8"].value, "%d.%m.%Y")
-    fecha_pago = fecha_dt.strftime("%-m/%-d/%y")  # Linux/macOS
+    fecha_pago = fecha_dt.strftime("%-m/%-d/%y")
     importe_FBL3N = abs(float(ws_fbl3n["N8"].value.replace(".", "").replace(",", ".")))
 
     # --- Paso 5: Sumas ---
@@ -132,7 +131,7 @@ def procesar():
     diferencia = total_pago_neto - importe_FBL3N
 
     # --- Paso 6: Exportar Excel ---
-    ruta_salida = "Template_HRC_olimpica.xlsx"
+    ruta_salida = "Archivos/Template/Template_HRC_olimpica.xlsx"
     hrc_template.to_excel(ruta_salida, index=False, sheet_name="Template", startrow=17, startcol=2)
 
     # --- Paso 7: Formato con openpyxl ---
@@ -143,15 +142,15 @@ def procesar():
     ws["C2"] = "Desglose de Pago"
     ws["C4"] = "CAMPOS NO EDITABLES"
     ws["G2"] = "REFERENCIA DE PAGO"
-    ws["H2"] = numero_orden  # dato dinámico
+    ws["H2"] = numero_orden
     ws["C6"] = "Cliente"
     ws["C8"] = "Codigo de Cliente"
-    ws["D6"] = nombre_cliente  # dato dinámico
-    ws["D8"] = id_cliente       # dato dinámico
+    ws["D6"] = nombre_cliente
+    ws["D8"] = id_cliente
     ws["C11"] = "Referencia"
-    ws["C12"] = numero_orden    # dato dinámico
+    ws["C12"] = numero_orden
     ws["D11"] = "Fecha"
-    ws["D12"] = fecha_pago      # dato dinámico
+    ws["D12"] = fecha_pago
     ws["E11"] = "Método de Pago"
     ws["E12"] = "Transferencia"
     ws["F11"] = "Valor"
@@ -164,7 +163,6 @@ def procesar():
     ws["F8"] = "DIFERENCIA"
     ws["G8"] = -diferencia
 
-    
     # Formato numérico
     for cell in ["G6", "G7", "G8", "F12"]:
         ws[cell].number_format = '#,##0.00'
@@ -186,7 +184,6 @@ def procesar():
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
     # Formato colores de tabla
-    # Definimos estilos
     azul_oscuro = PatternFill(start_color="002366", end_color="002366", fill_type="solid")
     celeste_intenso = PatternFill(start_color="1E90FF", end_color="1E90FF", fill_type="solid")
     amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
@@ -194,37 +191,31 @@ def procesar():
     letra_blanca = Font(color="FFFFFF")
     letra_negra = Font(color="000000")
 
-    # --- Aplicar formatos de fondo y letra ---
-    # Fondo azul oscuro y letra blanca
     for cell in ["G2", "C6", "C7", "C8", "F6", "F7", "F8", "C11", "D11", "E11",
                  "F11", "C18", "D18", "E18", "F18", "G18", "H18", "I18"]:
         ws[cell].fill = azul_oscuro
         ws[cell].font = letra_blanca
 
-    # Fondo celeste intenso y letra blanca
     for cell in ["C4", "D6", "D7", "D8", "G6", "G7", "G8"]:
         ws[cell].fill = celeste_intenso
         ws[cell].font = letra_blanca
 
-    # H2 amarillo
     ws["H2"].fill = amarillo
     ws["H2"].font = letra_negra
 
-    
-    # --- Ajustar ancho de columnas automáticamente ---
+    # Ajustar ancho de columnas automáticamente
     for col in ws.columns:
         max_length = 0
-        col_letter = col[0].column_letter  # obtener letra de la columna
+        col_letter = col[0].column_letter
         for cell in col:
             try:
                 if cell.value:
                     max_length = max(max_length, len(str(cell.value)))
             except:
                 pass
-        adjusted_width = (max_length + 2)  # margen extra
+        adjusted_width = (max_length + 2)
         ws.column_dimensions[col_letter].width = adjusted_width
-    
-    
+
     wb.save(ruta_salida)
     print(f"Archivo exportado correctamente: {ruta_salida}")
 
