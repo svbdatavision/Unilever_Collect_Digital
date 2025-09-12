@@ -38,12 +38,7 @@ def copiar_hoja(origen, destino, nombre="Remittance"):
 
 def exportar_template(
     hrc_template,
-    numero_orden,
-    fecha_pago,
-    importe_FBL3N,
-    id_cliente,
-    nombre_cliente,
-    ruta_remittance,
+    rutas["remittance"],
     ruta_salida
 ):
     """
@@ -51,7 +46,6 @@ def exportar_template(
     y copia la hoja Remittance tal cual.
     """
     # 1. Escribir Template
-    # Ordenar el template
     hrc_template = hrc_template.sort_values(
         by="Tipo de Documento",
         ascending=False
@@ -70,35 +64,17 @@ def exportar_template(
     letra_blanca = Font(color="FFFFFF")
     letra_negra = Font(color="000000")
 
-    # 3. Encabezados dinámicos
+    # 3. Encabezados fijos (sin datos dinámicos del cliente/pago)
     ws["C2"] = "Desglose de Pago"
     ws["C4"] = "CAMPOS NO EDITABLES"
     ws["G2"] = "REFERENCIA DE PAGO"
-    ws["H2"] = numero_orden
-    ws["C6"] = "Cliente"
-    ws["C8"] = "Codigo de Cliente"
-    ws["D6"] = nombre_cliente
-    ws["D8"] = id_cliente
-    ws["C11"] = "Referencia"
-    ws["C12"] = numero_orden
-    ws["D11"] = "Fecha"
-    ws["D12"] = fecha_pago
-    ws["E11"] = "Método de Pago"
-    ws["E12"] = "Transferencia"
-    ws["F11"] = "Valor"
-    ws["F12"] = importe_FBL3N
 
-    ws["F6"] = "TOTAL s/ BANCOS"
-    ws["G6"] = importe_FBL3N
-    ws["F7"] = "TOTAL s/ DETALLE"
-    ws["G7"] = hrc_template["Pago Neto"].sum()
-    ws["F8"] = "DIFERENCIA"
-    ws["G8"] = hrc_template["Pago Neto"].sum() - importe_FBL3N
+    # 4. Totales básicos usando solo el DataFrame
+    ws["F6"] = "TOTAL DETALLE"
+    ws["G6"] = hrc_template["Pago Neto"].sum()
 
-    # 4. Formatos numéricos
-    for cell in ["G6", "G7", "G8", "F12"]:
-        ws[cell].number_format = '#,##0.00'
-
+    # 5. Formatos numéricos
+    ws["G6"].number_format = '#,##0.00'
     num_cols = ["Importe de factura", "Pago Neto"]
     for col in num_cols:
         col_idx = hrc_template.columns.get_loc(col) + 3
@@ -114,18 +90,20 @@ def exportar_template(
             if col != "Comentarios":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # 5. Colores
-    for cell in ["G2", "C6", "C7", "C8", "F6", "F7", "F8", "C11", "D11", "E11",
-                 "F11", "C18", "D18", "E18", "F18", "G18", "H18", "I18"]:
-        ws[cell].fill = azul_oscuro
-        ws[cell].font = letra_blanca
-    for cell in ["C4", "D6", "D7", "D8", "G6", "G7", "G8"]:
-        ws[cell].fill = celeste_intenso
-        ws[cell].font = letra_blanca
-    ws["H2"].fill = amarillo
-    ws["H2"].font = letra_negra
+    # 6. Colores
+    for cell in ["G2", "C6", "F6", "C18", "D18", "E18", "F18", "G18", "H18", "I18"]:
+        if cell in ws:
+            ws[cell].fill = azul_oscuro
+            ws[cell].font = letra_blanca
+    for cell in ["C4", "G6"]:
+        if cell in ws:
+            ws[cell].fill = celeste_intenso
+            ws[cell].font = letra_blanca
+    if "H2" in ws:
+        ws["H2"].fill = amarillo
+        ws["H2"].font = letra_negra
 
-    # 6. Ajuste de columnas
+    # 7. Ajuste de columnas
     for col in ws.columns:
         max_length = 0
         col_letter = col[0].column_letter
@@ -137,7 +115,7 @@ def exportar_template(
                 pass
         ws.column_dimensions[col_letter].width = max_length + 2
 
-    # 7. Copiar hoja Remittance idéntica
+    # 8. Copiar hoja Remittance idéntica
     wb_rem = load_workbook(ruta_remittance, data_only=False)
     ws_original = wb_rem.active
     copiar_hoja(ws_original, wb, nombre="Remittance")

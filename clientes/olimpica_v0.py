@@ -30,37 +30,22 @@ def procesar():
     }
 
     # --- Paso 1: Leer Remittance ---
-    remittance = (
-        pd.read_excel(
-            rutas["remittance"], skiprows=21, nrows=33,
-            usecols=["Código de Documento", "No. Doc", "Total a Pagar"]
-        )
-        .dropna(subset=["Código de Documento"])
-    )
-
-    # eliminar filas donde aparezca la palabra "Total" (mayúsculas o minúsculas)
-    remittance = remittance[~remittance["Código de Documento"].str.contains("Total", case=False, na=False)]
-
+    remittance = pd.read_excel(
+        rutas["remittance"], skiprows=25, nrows=65,
+        usecols=["DOC", "No. Doc", "Total a Pagar"]
+    ).dropna(subset=["DOC"])
 
     remittance = remittance.rename(columns={
-        "Código de Documento": "Tipo de Documento",
+        "DOC": "Tipo de Documento",
         "No. Doc": "Referencia / Factura",
         "Total a Pagar": "Importe de factura"
     })
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str[0:-3]
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str[1:-3]
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
-        "380": "Factura",
-        "381": "Descuentos no asociados a FC"
+        "Factura Comercial": "Factura",
+        "Nota Crédito": "Descuentos no asociados a FC"
     })
-
-    remittance["Importe de factura"] = (
-    remittance["Importe de factura"]
-    .astype(str)              # convertir todo a string
-    .str.replace(".", "", regex=False)  # eliminar puntos de miles
-    .str.replace(",", ".", regex=False) # si existiera coma decimal, la pasamos a punto
-    .astype(float)            # convertir a numérico
-    .round(2)
-)
+    remittance["Importe de factura"] = pd.to_numeric(remittance["Importe de factura"], errors="coerce").round(2)
 
     for col in ["Descuento", "Motivo del descuento"]:
         if col not in remittance.columns:
