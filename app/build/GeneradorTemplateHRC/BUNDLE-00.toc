@@ -1,0 +1,3 @@
+([('GeneradorTemplateHRC',
+   '/Users/svonbergen/Desktop/Unilever/2.Automatizacion_aplicacion_pagos/dist/GeneradorTemplateHRC',
+   'EXECUTABLE')],)
