@@ -1,10 +1,37 @@
-# Ignorar carpetas de PyInstaller
-/dist/
-/build/
-/*.spec
+# =========================
+#  DATOS Y ASSETS
+# =========================
+data/
+drafts/
+Bosquejos/
+images/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
 
-# Ignorar archivos temporales de macOS
+# =========================
+#  APP COMPILADA
+# =========================
+dist/
+build/
+*.exe
+*.spec
+
+# =========================
+#  ARCHIVOS TEMPORALES
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
 .DS_Store
 
-# Ignorar archivos de salida de Excel generados
-/Archivos/Template/
+# =========================
+#  ENTORNOS LOCALES
+# =========================
+.env
+.venv/
+venv/
