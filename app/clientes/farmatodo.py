@@ -37,11 +37,16 @@ def procesar():
         for col in remittance.columns
     ]
     remittance = remittance[["Nro Factura", "Descripción", "Total"]]
+    # Eliminar filas donde 'Nro Factura' es NaN
+    remittance = remittance.dropna(subset=["Nro Factura"]).reset_index(drop=True)
     remittance = remittance.rename(columns={
         "Nro Factura": "Referencia / Factura",
         "Total": "Importe de factura"
     })
     remittance["Importe de factura"] = pd.to_numeric(remittance["Importe de factura"], errors="coerce").round(2)
+    # Limpiar caracteres Unicode invisibles y espacios
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.replace(r"[\u202A-\u202E\u200E\u200F]", "", regex=True)
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.strip()
 
     # --- Paso 2: Tipo de Documento ---
     conds = [
@@ -57,7 +62,6 @@ def procesar():
         remittance["Descuento"] = ""
     if "Motivo del descuento" not in remittance.columns:
         remittance["Motivo del descuento"] = ""
-
     conds_desc = [
         remittance["Referencia / Factura"].str.startswith("NC-DC05", na=False),
         remittance["Referencia / Factura"].str.startswith("NC-DC04", na=False),
@@ -71,10 +75,9 @@ def procesar():
     ]
     descuentos = [
         "CONVENIOS", "DSCT PROMOCIONAL", "DSCT PROMOCIONAL", "FACT PROVEEDOR",
-        "CONVENIOS", "DSCT AVERIAS", "PGO PDTE SOPORTE", "DSCT AVERIAS", "DSCT AVERIAS"
+        "CONVENIOS", "DPP", "RECHAZOS", "DSCT AVERIAS", "DSCT AVERIAS"
     ]
     motivos = ["657", "987", "987", "CSB", "657", "206", "551", "522", "522"]
-
     remittance["Descuento"] = np.select(conds_desc, descuentos, default=remittance["Descuento"])
     remittance["Motivo del descuento"] = np.select(conds_desc, motivos, default=remittance["Motivo del descuento"])
 
@@ -102,6 +105,7 @@ def procesar():
 
     # --- Paso 6: Merge ---
     hrc_template = pd.merge(remittance, FBL5N, on="Referencia / Factura", how="left")
+    hrc_template["Referencia / Factura"] = hrc_template["Referencia / Factura"].str.replace(r"^NC-", "", regex=True)
 
     # --- Paso 7: Diferencias ---
     hrc_template["Diferencia"] = pd.NA
@@ -111,9 +115,10 @@ def procesar():
 
     diferencias = hrc_template[hrc_template["Diferencia"].notna() & (hrc_template["Diferencia"] != 0)].copy()
     registros_diferencias = pd.DataFrame({
-        "Tipo de Documento": "Descuentos no asociados a FC",
         "Referencia / Factura": diferencias["Referencia / Factura"],
+        "Descripción": diferencias["Descripción"],
         "Importe de factura": diferencias["Diferencia"],
+        "Tipo de Documento": "Descuentos no asociados a FC",
         "Pago Neto": "",
         "Descuento": "MENORES VALORES",
         "Motivo del descuento": np.select(
@@ -135,7 +140,7 @@ def procesar():
         np.where(
             hrc_template["Descuento"] == "MENORES VALORES",
             hrc_template["Descuento"],
-            hrc_template["Descuento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("")
+            hrc_template["Descuento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("") + " " + hrc_template[ "Descripción"].fillna("")
         )
     )
     cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
