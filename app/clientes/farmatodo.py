@@ -72,12 +72,15 @@ def procesar():
         remittance["Referencia / Factura"].str.startswith("CNQPMP", na=False),
         remittance["Referencia / Factura"].str.startswith("NC-100", na=False),
         remittance["Referencia / Factura"].str.startswith("NC1", na=False),
+        remittance["Referencia / Factura"].str.startswith("NCNC", na=False),
+        remittance["Referencia / Factura"].str.startswith("NDNC", na=False),
+
     ]
     descuentos = [
         "CONVENIOS", "DSCT PROMOCIONAL", "DSCT PROMOCIONAL", "FACT PROVEEDOR",
-        "CONVENIOS", "DPP", "RECHAZOS", "DSCT AVERIAS", "DSCT AVERIAS"
+        "CONVENIOS", "DPP", "RECHAZOS", "DSCT AVERIAS", "DSCT AVERIAS", "NOTAS CREDITO", "NOTAS CREDITO"
     ]
-    motivos = ["657", "987", "987", "CSB", "657", "206", "551", "522", "522"]
+    motivos = ["657", "987", "987", "CSB", "657", "206", "551", "522", "522", "987", "987"]
     remittance["Descuento"] = np.select(conds_desc, descuentos, default=remittance["Descuento"])
     remittance["Motivo del descuento"] = np.select(conds_desc, motivos, default=remittance["Motivo del descuento"])
 
