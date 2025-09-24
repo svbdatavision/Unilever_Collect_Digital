@@ -50,7 +50,10 @@ def procesar():
         "Importe en ML": "Importe de factura",
     })
 
-        # --- Definición de Reglas (CARDs)
+    # --- Intercambiar signo de los valores
+    remittance["Importe de factura"] = remittance["Importe de factura"] * -1
+
+    # --- Definición de Reglas (CARDs)
     for col in ["Descuento", "Motivo del descuento"]:
         if col not in remittance.columns:
             remittance[col] = ""
@@ -81,9 +84,6 @@ def procesar():
     condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
     remittance.loc[condicion, "Descuento"] = "DESCUENTO"
     remittance.loc[condicion, "Motivo del descuento"] = 987
-
-    # --- Ordenar ---
-    #remittance = remittance.sort_values(by="Tipo de Documento", ascending=False).reset_index(drop=True)
 
     # --- Paso 5: Leer FBL5N ---
     FBL5N = pd.read_excel(
@@ -142,17 +142,12 @@ def procesar():
         hrc_template["Descuento"] == "MENORES VALORES",
         "MENORES VALORES",
         np.where(
-            hrc_template["Clase"] == "Nota",
+            hrc_template["Tipo de Documento"] == "Nota",
             hrc_template["Texto"].fillna(""),
             hrc_template["Tipo de Documento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("")
         )
     )
 )
-
-    cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
-    cond_2 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] > 20000)
-    hrc_template.loc[cond_1, "Comentarios"] = "Myr Vlr Pagado " + hrc_template.loc[cond_1, "Referencia / Factura"].fillna("")
-    hrc_template.loc[cond_2, "Comentarios"] = "Saldo FC " + hrc_template.loc[cond_2, "Referencia / Factura"].fillna("")
     
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
