@@ -137,13 +137,18 @@ def procesar():
 
     # --- MENORES VALORES ---
     hrc_template["Comentarios"] = np.where(
-        hrc_template["Tipo de Documento"] == "Factura", "",
+    hrc_template["Tipo de Documento"] == "Factura", "",
+    np.where(
+        hrc_template["Descuento"] == "MENORES VALORES",
+        "MENORES VALORES",
         np.where(
-            hrc_template["Descuento"] == "MENORES VALORES",
-            hrc_template["Descuento"],
-            hrc_template["Tipo de Documento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("") + " " + hrc_template[ "Texto"].fillna("")
+            hrc_template["Clase"] == "Nota",
+            hrc_template["Texto"].fillna(""),
+            hrc_template["Tipo de Documento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("")
         )
     )
+)
+
     cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
     cond_2 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] > 20000)
     hrc_template.loc[cond_1, "Comentarios"] = "Myr Vlr Pagado " + hrc_template.loc[cond_1, "Referencia / Factura"].fillna("")
