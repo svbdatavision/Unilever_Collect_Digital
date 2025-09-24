@@ -8,7 +8,7 @@ CLIENTES = {
     "Olimpica": olimpica.procesar,
     "Farmatodo": farmatodo.procesar,
     "D1": D1.procesar,
-    "Copidrogas"
+    "Copidrogas": copi.procesar
 }
 
 # Función que se ejecuta al hacer clic en el botón
