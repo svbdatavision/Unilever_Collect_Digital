@@ -50,16 +50,7 @@ def procesar():
         "Importe en ML": "Importe de factura",
     })
 
-    #remittance["Importe de factura"] = (
-    #remittance["Importe de factura"]
-    #.astype(str)              # convertir todo a string
-    #.str.replace(".", "", regex=False)  # eliminar puntos de miles
-    #.str.replace(",", ".", regex=False) # si existiera coma decimal, la pasamos a punto
-    #.astype(float)            # convertir a numérico
-    #.round(2)
-    #)
-
-    # --- Definición de Reglas (CARDs)
+        # --- Definición de Reglas (CARDs)
     for col in ["Descuento", "Motivo del descuento"]:
         if col not in remittance.columns:
             remittance[col] = ""
@@ -69,7 +60,7 @@ def procesar():
         remittance["Tipo de Documento"].str.startswith("Devolucion", na=False),
         remittance["Tipo de Documento"].str.startswith("Reduc Factura Compra", na=False),
         remittance["Tipo de Documento"].str.startswith("Traslado Notas  Deudor acreedor", na=False),
-        #remittance["Tipo de Documento"].str.startswith("310", na=False)
+       
     ]
     descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR"]
     motivos = ["522", "987", "CSB"]
@@ -92,7 +83,7 @@ def procesar():
     remittance.loc[condicion, "Motivo del descuento"] = 987
 
     # --- Ordenar ---
-    remittance = remittance.sort_values(by="Tipo de Documento", ascending=False).reset_index(drop=True)
+    #remittance = remittance.sort_values(by="Tipo de Documento", ascending=False).reset_index(drop=True)
 
     # --- Paso 5: Leer FBL5N ---
     FBL5N = pd.read_excel(
@@ -150,7 +141,7 @@ def procesar():
         np.where(
             hrc_template["Descuento"] == "MENORES VALORES",
             hrc_template["Descuento"],
-            hrc_template["Descuento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("") + " " + hrc_template[ "Texto"].fillna("")
+            hrc_template["Tipo de Documento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("") + " " + hrc_template[ "Texto"].fillna("")
         )
     )
     cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
