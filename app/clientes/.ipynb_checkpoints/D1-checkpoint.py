@@ -139,8 +139,6 @@ def procesar():
     exportar_template(
         hrc_template=hrc_template,
         numero_orden="",  # TODO parametrizar
-        fecha_pago="",  # TODO parametrizar
-        importe_FBL3N=hrc_template["Pago Neto"].sum(),
         id_cliente="",  # TODO parametrizar
         nombre_cliente="",  # TODO parametrizar
         ruta_remittance=remittance_buffer,  # <- buffer en memoria

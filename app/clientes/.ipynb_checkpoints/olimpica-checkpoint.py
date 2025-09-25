@@ -141,14 +141,10 @@ def procesar():
     fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
-
-    wb_fbl3n = load_workbook(rutas["fbl3n"], data_only=True)
-    fecha_dt = datetime.strptime(wb_fbl3n.active["K8"].value, "%d.%m.%Y")
-    fecha_pago = fecha_dt.strftime("%-m/%-d/%y")
-    importe_FBL3N = abs(float(wb_fbl3n.active["N8"].value.replace(".", "").replace(",", ".")))
+    
 
     # --- Paso 5: Exportar con formato genérico ---
-    exportar_template(hrc_template, numero_orden, fecha_pago, importe_FBL3N,
+    exportar_template(hrc_template, numero_orden, 
                       id_cliente, nombre_cliente,
                       rutas["remittance"], rutas["salida"])
 

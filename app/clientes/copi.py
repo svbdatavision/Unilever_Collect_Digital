@@ -180,15 +180,15 @@ def procesar():
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
 
-    fecha_pago = datetime.today().strftime("%#m/%#d/%y")
-    importe_FBL3N = hrc_template["Pago Neto"].sum()  # usamos el total calculado
+#    fecha_pago = datetime.today().strftime("%#m/%#d/%y")
+#    importe_FBL3N = hrc_template["Pago Neto"].sum()  # usamos el total calculado
 
     # --- Exportar con formato genérico ---
     exportar_template(
         hrc_template,
         numero_orden,
-        fecha_pago,
-        importe_FBL3N,
+#        fecha_pago,
+#        importe_FBL3N,
         id_cliente,
         nombre_cliente,
         rutas["remittance"],

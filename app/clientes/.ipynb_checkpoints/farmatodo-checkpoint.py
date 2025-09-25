@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
 from openpyxl import load_workbook
 import os, sys
 from .formato_template import exportar_template
@@ -145,7 +144,7 @@ def procesar():
     )
     cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
     cond_2 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] > 20000)
-    hrc_template.loc[cond_1, "Comentarios"] = "Myr Vlr Pagado " + hrc_template.loc[cond_1, "Referencia / Factura"].fillna("")
+    hrc_template.loc[cond_1, "Comentarios"] = "Myr Vlr Pagado" + hrc_template.loc[cond_1, "Referencia / Factura"].fillna("")
     hrc_template.loc[cond_2, "Comentarios"] = "Saldo FC " + hrc_template.loc[cond_2, "Referencia / Factura"].fillna("")
     
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
@@ -179,15 +178,11 @@ def procesar():
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
 
-    fecha_pago = datetime.today().strftime("%#m/%#d/%y")
-    importe_FBL3N = hrc_template["Pago Neto"].sum()  # usamos el total calculado
 
     # --- Paso 12: Exportar con formato genérico ---
     exportar_template(
         hrc_template,
         numero_orden,
-        fecha_pago,
-        importe_FBL3N,
         id_cliente,
         nombre_cliente,
         rutas["remittance"],

@@ -41,8 +41,6 @@ def copiar_hoja(origen, destino, nombre="Remittance"):
 def exportar_template(
     hrc_template,
     numero_orden,
-    fecha_pago,
-    importe_FBL3N,
     id_cliente,
     nombre_cliente,
     ruta_remittance,
@@ -92,18 +90,18 @@ def exportar_template(
     ws["C11"] = "Referencia"
     ws["C12"] = numero_orden
     ws["D11"] = "Fecha"
-    ws["D12"] = fecha_pago
+    ws["D12"] = ""
     ws["E11"] = "Método de Pago"
     ws["E12"] = "Transferencia"
     ws["F11"] = "Valor"
-    ws["F12"] = importe_FBL3N
+    ws["F12"] = ""
 
     ws["F6"] = "TOTAL s/ BANCOS"
-    ws["G6"] = importe_FBL3N
+    ws["G6"] = ""
     ws["F7"] = "TOTAL s/ DETALLE"
     ws["G7"] = hrc_template["Pago Neto"].sum()
     ws["F8"] = "DIFERENCIA"
-    ws["G8"] = hrc_template["Pago Neto"].sum() - importe_FBL3N
+    ws["G8"] = hrc_template["Pago Neto"].sum()
 
     # 4. Formatos numéricos
     for cell in ["G6", "G7", "G8", "F12"]:
