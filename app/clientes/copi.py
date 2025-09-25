@@ -49,9 +49,11 @@ def procesar():
         "Clase": "Tipo de Documento",
         "Importe en ML": "Importe de factura",
     })
-
+    
+    # Limpio de nan dataset
+    remittance = remittance.dropna(subset=["Tipo de Documento"])
     # --- Intercambiar signo de los valores
-    remittance["Importe de factura"] = remittance["Importe de factura"] * -1
+    remittance["Importe de factura"] = remittance["Importe de factura"] * -1 # Ver corre en Mac no en Windows
 
     # --- Definición de Reglas (CARDs)
     for col in ["Descuento", "Motivo del descuento"]:
@@ -84,7 +86,13 @@ def procesar():
     condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
     remittance.loc[condicion, "Descuento"] = "DESCUENTO"
     remittance.loc[condicion, "Motivo del descuento"] = 987
+    
 
+    remittance["Tipo de Documento"] = (
+        remittance["Tipo de Documento"]
+        .replace("Factura Acrededor", "Factura")
+    )
+    
     # --- Paso 5: Leer FBL5N ---
     FBL5N = pd.read_excel(
         rutas["fbl5n"],
@@ -106,6 +114,7 @@ def procesar():
 
     # ---  Merge ---
     hrc_template = pd.merge(remittance, FBL5N, on="Referencia / Factura", how="left")
+
     hrc_template["Referencia / Factura"] = hrc_template["Referencia / Factura"].str.replace(r"^NC-", "", regex=True)
 
     # ---  Diferencias ---
@@ -163,7 +172,12 @@ def procesar():
         hrc_template["Tipo de Documento"] == "Nota de Crédito",
         ["importe_FBL5N", "importe_FBL5N", "Text", "Reason code"]
     ].values
-
+    
+    mask = hrc_template["Motivo del descuento"] == "NRO"
+    # Vaciar "Motivo del descuento" solo en esas filas
+    hrc_template.loc[mask, "Motivo del descuento"] = ""
+    # Asignar "NRO" en "Descuento" solo en esas filas
+    hrc_template.loc[mask, "Descuento"] = "NRO"
     # --- Columnas finales ---
     columnas_finales = [
         "Tipo de Documento", "Referencia / Factura", "Importe de factura",

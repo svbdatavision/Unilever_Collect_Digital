@@ -57,10 +57,16 @@ def exportar_template(
         lambda x: 1 if x == "MENORES VALORES" else 0
     )
 
+    # Columna auxiliar: 0 si es positivo o cero, 1 si es negativo
+    hrc_template["_signo_pago_neto"] = (hrc_template["Pago Neto"] < 0).astype(int)
+
     hrc_template = hrc_template.sort_values(
-        by=["_orden_descuento", "Tipo de Documento", "Descuento"],
-        ascending=[True, False, True]  # primero flag, luego TipoDoc desc, luego Descuento asc
+        by=["_signo_pago_neto", "Referencia / Factura"],
+        ascending=[True, True]  # primero positivos (0), luego negativos (1); dentro de eso, por referencia
     ).reset_index(drop=True)
+
+    # Si no querés quedarte con la columna auxiliar
+    hrc_template = hrc_template.drop(columns="_signo_pago_neto")
 
     # Borrar columna auxiliar
     hrc_template = hrc_template.drop(columns=["_orden_descuento"])
