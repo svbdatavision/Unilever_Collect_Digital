@@ -39,6 +39,7 @@ def procesar():
     )
 
     # eliminar filas donde aparezca la palabra "Total" (mayúsculas o minúsculas)
+    remittance["Código de Documento"] = remittance["Código de Documento"].astype(str)
     remittance = remittance[~remittance["Código de Documento"].str.contains("Total", case=False, na=False)]
 
 
@@ -47,7 +48,8 @@ def procesar():
         "No. Doc": "Referencia / Factura",
         "Total a Pagar": "Importe de factura"
     })
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str[0:-3]
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str[0:-3]
+
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "380": "Factura",
         "381": "Descuentos no asociados a FC"
@@ -60,7 +62,7 @@ def procesar():
     .str.replace(",", ".", regex=False) # si existiera coma decimal, la pasamos a punto
     .astype(float)            # convertir a numérico
     .round(2)
-)
+    )
 
     for col in ["Descuento", "Motivo del descuento"]:
         if col not in remittance.columns:
@@ -129,6 +131,7 @@ def procesar():
     
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
+    
     columnas_finales = ["Tipo de Documento", "Referencia / Factura", "Importe de factura",
                         "Descuento", "Motivo del descuento", "Pago Neto", "Comentarios"]
     hrc_template = hrc_template[columnas_finales]
