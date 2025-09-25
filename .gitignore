@@ -1,15 +1,38 @@
 # =========================
-#  DATOS Y ASSETS
+#  SOLO CÓDIGO Y NOTEBOOKS
 # =========================
+# Permitimos .py y .ipynb, pero ignoramos el resto de binarios pesados
+
+# -------------------------
+# Archivos de datos y assets
+# -------------------------
 data/
 drafts/
 Bosquejos/
 images/
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.xlsm
+*.ods
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.svg
+*.bmp
+*.tiff
 
 # =========================
 #  APP COMPILADA
