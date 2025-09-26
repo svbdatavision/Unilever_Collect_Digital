@@ -83,7 +83,7 @@ def procesar():
     remittance.loc[mask_dev, "Motivo del descuento"] = "522"
 
 # --- Condición adicional para facturas Proveedor" ---
-    mask_dcto = remittance["Tipo de Documento"].astype(str).str.startswith("Traslado Notas  Deudor acreedor")
+    mask_dcto = remittance["Clase"].astype(str).str.startswith("Traslado Notas  Deudor acreedor")
     remittance.loc[mask_dcto, "Descuento"] = "FACT PROVEEDOR"
     remittance.loc[mask_dcto, "Motivo del descuento"] = "CSB"
 
