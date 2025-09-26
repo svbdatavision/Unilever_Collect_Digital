@@ -1,14 +1,15 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from clientes import olimpica, farmatodo, D1, copi
+from clientes import olimpica, farmatodo, D1, copi, Cencosud
 
 # Registro de clientes
 CLIENTES = {
     "Olimpica": olimpica.procesar,
     "Farmatodo": farmatodo.procesar,
     "D1": D1.procesar,
-    "Copidrogas": copi.procesar
+    "Copidrogas": copi.procesar,
+    "Cencosud": Cencosud.procesar
 }
 
 # Función que se ejecuta al hacer clic en el botón

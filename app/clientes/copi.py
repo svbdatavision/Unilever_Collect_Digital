@@ -75,7 +75,7 @@ def procesar():
     # --- Condición adicional para textos que comienzan con "DCTO 2.00%" ---
     mask_dcto = remittance["Texto"].astype(str).str.startswith("DCTO 2.00%")
     remittance.loc[mask_dcto, "Descuento"] = "DPP NO PROCEDE"
-    remittance.loc[mask_dcto, "Motivo del descuento"] = "677"
+    remittance.loc[mask_dcto, "Motivo del descuento"] = "667"
 
     # --- Condición adicional para textos que comienzan con "Dev.>" ---
     mask_dev = remittance["Texto"].astype(str).str.startswith("Dev.>")

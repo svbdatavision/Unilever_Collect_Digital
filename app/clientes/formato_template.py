@@ -52,24 +52,29 @@ def exportar_template(
     """
     # 1. Escribir Template
     # Ordenar el template
-    # Creamos columna auxiliar para empujar "MENORES VALORES" al final
-    hrc_template["_orden_descuento"] = hrc_template["Descuento"].apply(
-        lambda x: 1 if x == "MENORES VALORES" else 0
+    
+        # Columna auxiliar: 0 si está vacío, 1 si tiene valor
+    hrc_template["_motivo_vacio"] = hrc_template["Motivo del descuento"].apply(
+        lambda x: 0 if pd.isna(x) or str(x).strip() == "" else 1
     )
 
-    # Columna auxiliar: 0 si es positivo o cero, 1 si es negativo
-    hrc_template["_signo_pago_neto"] = (hrc_template["Pago Neto"] < 0).astype(int)
+    # Columna auxiliar: 2 si es "384" o "WOB", 1 si tiene otro valor, 0 si está vacío
+    hrc_template["_orden_motivo"] = hrc_template["Motivo del descuento"].apply(
+        lambda x: 2 if str(x).strip().upper() in ["384", "WOB"] else (0 if pd.isna(x) or str(x).strip() == "" else 1)
+    )
 
+    # Ordenar por:
+    # 1. _orden_motivo (vacíos primero, luego normales, luego 384/WOB)
+    # 2. Motivo del descuento (alfabéticamente dentro de los normales)
+    # 3. Referencia / Factura (dentro de los vacíos)
     hrc_template = hrc_template.sort_values(
-        by=["_signo_pago_neto", "Referencia / Factura"],
-        ascending=[True, True]  # primero positivos (0), luego negativos (1); dentro de eso, por referencia
+        by=["_orden_motivo", "Motivo del descuento", "Referencia / Factura"],
+        ascending=[True, True, True]
     ).reset_index(drop=True)
 
-    # Si no querés quedarte con la columna auxiliar
-    hrc_template = hrc_template.drop(columns="_signo_pago_neto")
+    # Eliminar columnas auxiliares
+    hrc_template = hrc_template.drop(columns=["_motivo_vacio", "_orden_motivo"])
 
-    # Borrar columna auxiliar
-    hrc_template = hrc_template.drop(columns=["_orden_descuento"])
     
     with pd.ExcelWriter(ruta_salida, engine="openpyxl") as writer:
         hrc_template.to_excel(writer, index=False, sheet_name="Template", startrow=17, startcol=2)
