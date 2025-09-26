@@ -82,6 +82,12 @@ def procesar():
     remittance.loc[mask_dev, "Descuento"] = "AVERIA"
     remittance.loc[mask_dev, "Motivo del descuento"] = "522"
 
+# --- Condición adicional para facturas Proveedor" ---
+    mask_dcto = remittance["Tipo de Documento"].astype(str).str.startswith("Traslado Notas  Deudor acreedor")
+    remittance.loc[mask_dcto, "Descuento"] = "FACT PROVEEDOR"
+    remittance.loc[mask_dcto, "Motivo del descuento"] = "CSB"
+
+
     # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
     condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
     remittance.loc[condicion, "Descuento"] = "DESCUENTO"
@@ -128,7 +134,7 @@ def procesar():
         "Referencia / Factura": diferencias["Referencia / Factura"],
         "Texto": diferencias["Texto"],
         "Importe de factura": diferencias["Diferencia"],
-        "Tipo de Documento": "Descuentos no asociados a FC",
+        "Tipo de Documento": "Descuentos",
         "Pago Neto": "",
         "Descuento": "MENORES VALORES",
         "Motivo del descuento": np.select(
@@ -193,9 +199,6 @@ def procesar():
     fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n["Customer"].iloc[0]
     nombre_cliente = fbl5n["Name 1"].iloc[0]
-
-#    fecha_pago = datetime.today().strftime("%#m/%#d/%y")
-#    importe_FBL3N = hrc_template["Pago Neto"].sum()  # usamos el total calculado
 
     # --- Exportar con formato genérico ---
     exportar_template(
