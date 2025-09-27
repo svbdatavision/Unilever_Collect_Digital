@@ -61,7 +61,6 @@ def procesar():
             remittance[col] = ""
 
     conds = [
-        #(remittance["Tipo de Documento"].str.startswith("Factura Acrededor", na=False)) & (remittance["Importe de factura"] < 0),
         remittance["Tipo de Documento"].str.startswith("Devolucion", na=False),
         remittance["Tipo de Documento"].str.startswith("Reduc Factura Compra", na=False),
         remittance["Tipo de Documento"].str.startswith("Traslado Notas  Deudor acreedor", na=False),
@@ -81,12 +80,6 @@ def procesar():
     mask_dev = remittance["Texto"].astype(str).str.startswith("Dev.>")
     remittance.loc[mask_dev, "Descuento"] = "AVERIA"
     remittance.loc[mask_dev, "Motivo del descuento"] = "522"
-
-# --- Condición adicional para facturas Proveedor" ---
-    mask_dcto = remittance["Clase"].astype(str).str.startswith("Traslado Notas  Deudor acreedor")
-    remittance.loc[mask_dcto, "Descuento"] = "FACT PROVEEDOR"
-    remittance.loc[mask_dcto, "Motivo del descuento"] = "CSB"
-
 
     # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
     condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
