@@ -88,7 +88,7 @@ def procesar():
 
 
     #Guardar como CSV
-    filtered_df.to_csv(output_csv_path, index=False)
+    filtered_df.to_csv("prueba_euro.csv", index=False)
     print(f"✅ Archivo CSV guardado en: {output_csv_path}")
 
 
