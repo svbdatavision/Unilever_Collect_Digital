@@ -1,14 +1,21 @@
-import sys
-import os
+import sys  # Para detectar ejecución empaquetada (frozen) y resolver rutas
+import os   # Para construir rutas relativas al proyecto
 import re
+import io
 import pandas as pd
 import numpy as np
-import fitz  # PyMuPDF
-import io
+import fitz  # PyMuPDF, para leer PDF
+from openpyxl import load_workbook
 from .formato_template import exportar_template
+from .diferencias import procesar_diferencias
 
 
 def _project_root():
+    """
+    Devuelve la carpeta raíz del proyecto:
+    - Si corre dentro de un .app (PyInstaller / py2app) -> carpeta que contiene el .app
+    - Si corre como script -> la carpeta del archivo actual (../)
+    """
     if getattr(sys, "frozen", False):
         macos_dir = os.path.dirname(sys.executable)
         contents_dir = os.path.dirname(macos_dir)
@@ -18,15 +25,24 @@ def _project_root():
 
 
 def procesar():
+    """
+    Proceso general para Remittance + FBL5N
+    Adaptable a cualquier cliente.
+    Incluye comentarios específicos para D1.
+    """
     root = _project_root()
 
+    # --- Rutas ---
     rutas = {
-        "remittance_pdf": os.path.join(root, "Archivos", "Remittance", "Remittance_D1.pdf"),
-        "fbl5n":          os.path.join(root, "Archivos", "Base_de_datos", "FBL5N_d1.xlsx"),
-        "salida":         os.path.join(root, "Archivos", "Template", "Template_HRC_D1.xlsx"),
+        "remittance_pdf": os.path.join(root, "Archivos", "Remittance", "Remittance_D1.pdf"),  # D1
+        "fbl5n": os.path.join(root, "Archivos", "Base_de_datos", "FBL5N_d1.xlsx"),  # D1
+        "salida": os.path.join(root, "Archivos", "Template", "Template_HRC_D1.xlsx")  # D1
     }
 
-    # --- Paso 1: Extraer facturas del PDF ---
+    # =====================================================
+    # 1. Lectura de Remitente
+    # =====================================================
+    # Para D1: Remittance en PDF
     factura_pattern = re.compile(
         r"RE\s+\d+\s+PMP\d+\s+\d{1,3}(?:\.\d{3})*\s+\d+\s+\d{1,3}(?:\.\d{3})*\s+\d+\s+\d{1,3}(?:\.\d{3})*"
     )
@@ -50,61 +66,76 @@ def procesar():
 
     remittance = pd.DataFrame(facturas)
     remittance["Importe de factura"] = remittance["Neto Pagado"].astype(float)
-    remittance["Tipo de Documento"] = "Factura"
+    remittance["Tipo de Documento"] = "Factura"  # D1: todas las facturas son tipo "Factura"
 
-    # --- Guardar Remittance en un buffer en memoria ---
+    # =====================================================
+    # 2. Limpieza de Remittance
+    # =====================================================
+    # Limpiar referencias, caracteres invisibles y espacios
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.replace(
+        r"[\u202A-\u202E\u200E\u200F]", "", regex=True
+    ).str.strip()
+
+    # 2.1 Guardar Remittance en buffer en memoria
+    # - Crear un BytesIO con la tabla remittance lista para exportar
     remittance_buffer = io.BytesIO()
     with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
         remittance.to_excel(writer, index=False)
     remittance_buffer.seek(0)  # rebobinar el buffer
 
-    # --- Paso 2: Leer FBL5N y preparar ---
+    # =====================================================
+    # 3. Diferenciamos Facturas de diferencias (CARDs / Reglas)
+    # =====================================================
+    # D1: ejemplo simplificado de reglas
+    conds = [
+        remittance["Referencia / Factura"].str.startswith("PMP", na=False) & (remittance["Importe de factura"] < 0),
+        # FALTA: otras reglas específicas de D1 si aplica
+    ]
+    descuentos = ["RECHAZO"]  # FALTA: ajustar según reglas D1
+    motivos = ["551"]          # FALTA: ajustar según reglas D1
+
+    remittance["Descuento"] = np.select(conds, descuentos, default="Descuento")
+    remittance["Motivo del descuento"] = np.select(conds, motivos, default="")
+
+    # =====================================================
+    # 4. Lectura de FBL5N
+    # =====================================================
     FBL5N = pd.read_excel(
         rutas["fbl5n"],
-        sheet_name="Sheet1",
         usecols=["Document Type", "Reference", "Amount in local currency", "Reason code", "Document Number", "Text"]
     )
+
+    # =====================================================
+    # 5. Filtro FBL5N
+    # =====================================================
     FBL5N = FBL5N[(FBL5N["Document Type"] == "RV") | (FBL5N["Reason code"] == "NRO")]
 
+    # =====================================================
+    # 6. Rename de columnas
+    # =====================================================
     FBL5N = FBL5N.rename(columns={
         "Reference": "Referencia / Factura",
         "Amount in local currency": "importe_FBL5N"
     }).reset_index(drop=True)
 
-    FBL5N["Referencia / Factura"] = np.where(
-        FBL5N["Reason code"] == "NRO",
-        FBL5N["Document Number"].astype("Int64").astype(str),
-        FBL5N["Referencia / Factura"]
-    )
+    # =====================================================
+    # 7. Trabajamos con los NRO
+    # =====================================================
+    # FALTA: lógica completa de NRO para D1 si aplica
 
-    # --- Paso 3: Merge y diferencias ---
+    # =====================================================
+    # 8. Merge por "Referencia / Factura"
+    # =====================================================
     hrc_template = pd.merge(remittance, FBL5N, on="Referencia / Factura", how="left")
-    hrc_template["Diferencia"] = pd.NA
-    hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
-        hrc_template["importe_FBL5N"] - hrc_template["Importe de factura"]
-    )
 
-    diferencias = hrc_template[hrc_template["Diferencia"].notna() & (hrc_template["Diferencia"] != 0)].copy()
-    registros_diferencias = pd.DataFrame({
-        "Tipo de Documento": "Descuentos no asociados a FC",
-        "Referencia / Factura": diferencias["Referencia / Factura"],
-        "Importe de factura": diferencias["Diferencia"],
-        "Pago Neto": "",
-        "Descuento": "MENORES VALORES",
-        "Motivo del descuento": np.select(
-            condlist=[
-                (diferencias["Diferencia"] <= -20000) | (diferencias["Diferencia"] >= 20000),
-                (diferencias["Diferencia"].between(-20000, 0, inclusive="neither")),
-                (diferencias["Diferencia"].between(0, 20000, inclusive="left"))
-            ],
-            choicelist=["987", "WOB", "384"],
-            default="Error (Revisar)"
-        )
-    })
+    # =====================================================
+    # 9. Calculamos Diferencias
+    # =====================================================
+    hrc_template = procesar_diferencias(hrc_template)  # lógica centralizada
 
-    hrc_template = pd.concat([hrc_template, registros_diferencias], ignore_index=True)
-
-    # --- Paso 4: Comentarios y campos finales ---
+    # =====================================================
+    # 10. Ajuste de Comentarios y Pago Neto
+    # =====================================================
     hrc_template["Comentarios"] = np.where(
         hrc_template["Tipo de Documento"] == "Factura", "",
         np.where(
@@ -113,17 +144,11 @@ def procesar():
             hrc_template["Referencia / Factura"].fillna("")
         )
     )
-    cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
-    cond_2 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] > 20000)
-    hrc_template.loc[cond_1, "Comentarios"] = "Myr Vlr Pagado " + hrc_template.loc[cond_1, "Referencia / Factura"].fillna("")
-    hrc_template.loc[cond_2, "Comentarios"] = "Saldo FC " + hrc_template.loc[cond_2, "Referencia / Factura"].fillna("")
-
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
-    nota_credito = FBL5N[FBL5N["Reason code"] == "NRO"].copy()
-    nota_credito["Tipo de Documento"] = "Nota de Crédito"
-    hrc_template = pd.concat([hrc_template, nota_credito], ignore_index=True)
-
+    # =====================================================
+    # 11. Definimos columnas finales
+    # =====================================================
     columnas_finales = [
         "Tipo de Documento",
         "Referencia / Factura",
@@ -135,13 +160,20 @@ def procesar():
     ]
     hrc_template = hrc_template[columnas_finales]
 
-    # --- Paso 5: Exportar con formato usando formato_template ---
+    # =====================================================
+    # 12. Exportar a Template
+    # =====================================================
+    # FALTA: Extraer numero_orden, id_cliente, nombre_cliente dinámicamente
+    numero_orden = ""  # FALTA
+    id_cliente = ""    # FALTA
+    nombre_cliente = ""  # FALTA
+
     exportar_template(
         hrc_template=hrc_template,
-        numero_orden="",  # TODO parametrizar
-        id_cliente="",  # TODO parametrizar
-        nombre_cliente="",  # TODO parametrizar
-        ruta_remittance=remittance_buffer,  # <- buffer en memoria
+        numero_orden=numero_orden,
+        id_cliente=id_cliente,
+        nombre_cliente=nombre_cliente,
+        ruta_remittance=remittance_buffer,  # PDF en memoria
         ruta_salida=rutas["salida"]
     )
 

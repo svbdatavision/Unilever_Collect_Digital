@@ -7,7 +7,7 @@ from openpyxl.utils import get_column_letter
 
 def copiar_hoja(origen, destino, nombre="Remittance"):
     """
-    Copia una hoja completa de Excel (valores + estilos + dimensiones + merges).
+    Utilidad: Copia una hoja completa de Excel (valores + estilos + dimensiones + merges).
     """
     ws_new = destino.create_sheet(title=nombre)
 
@@ -23,11 +23,9 @@ def copiar_hoja(origen, destino, nombre="Remittance"):
                 new_cell.protection = copy(cell.protection)
                 new_cell.alignment = copy(cell.alignment)
 
-    # Copiar dimensiones de columnas
+    # Copiar dimensiones de columnas y filas
     for col_letter, col_dim in origen.column_dimensions.items():
         ws_new.column_dimensions[col_letter].width = col_dim.width
-
-    # Copiar dimensiones de filas
     for row_idx, row_dim in origen.row_dimensions.items():
         ws_new.row_dimensions[row_idx].height = row_dim.height
 
@@ -47,44 +45,41 @@ def exportar_template(
     ruta_salida
 ):
     """
-    Exporta un DataFrame al template de Excel con formato estandarizado
-    y copia la hoja Remittance tal cual.
+    Paso 11. Ajustamos a formato Template
     """
-    # 1. Escribir Template
-    # Ordenar el template
-    # Creamos columna auxiliar para empujar "MENORES VALORES" al final
-    hrc_template["_orden_descuento"] = hrc_template["Descuento"].apply(
-        lambda x: 1 if x == "MENORES VALORES" else 0
+
+    # 11.1 Ordenar el DataFrame antes de exportar
+    # Auxiliares de orden
+    hrc_template["_motivo_vacio"] = hrc_template["Motivo del descuento"].apply(
+        lambda x: 0 if pd.isna(x) or str(x).strip() == "" else 1
+    )
+    hrc_template["_orden_motivo"] = hrc_template["Motivo del descuento"].apply(
+        lambda x: 2 if str(x).strip().upper() in ["384", "WOB"] else (0 if pd.isna(x) or str(x).strip() == "" else 1)
     )
 
-    # Columna auxiliar: 0 si es positivo o cero, 1 si es negativo
-    hrc_template["_signo_pago_neto"] = (hrc_template["Pago Neto"] < 0).astype(int)
-
+    # Orden final
     hrc_template = hrc_template.sort_values(
-        by=["_signo_pago_neto", "Referencia / Factura"],
-        ascending=[True, True]  # primero positivos (0), luego negativos (1); dentro de eso, por referencia
+        by=["_orden_motivo", "Motivo del descuento", "Referencia / Factura"],
+        ascending=[True, True, True]
     ).reset_index(drop=True)
 
-    # Si no querés quedarte con la columna auxiliar
-    hrc_template = hrc_template.drop(columns="_signo_pago_neto")
+    hrc_template = hrc_template.drop(columns=["_motivo_vacio", "_orden_motivo"])
 
-    # Borrar columna auxiliar
-    hrc_template = hrc_template.drop(columns=["_orden_descuento"])
-    
+    # 11.2 Exportar DataFrame a Excel en hoja "Template"
     with pd.ExcelWriter(ruta_salida, engine="openpyxl") as writer:
         hrc_template.to_excel(writer, index=False, sheet_name="Template", startrow=17, startcol=2)
 
     wb = load_workbook(ruta_salida)
     ws = wb["Template"]
 
-    # 2. Colores y estilos
+    # 11.3 Colores y estilos
     azul_oscuro = PatternFill(start_color="002366", end_color="002366", fill_type="solid")
     celeste_intenso = PatternFill(start_color="1E90FF", end_color="1E90FF", fill_type="solid")
     amarillo = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     letra_blanca = Font(color="FFFFFF")
     letra_negra = Font(color="000000")
 
-    # 3. Encabezados dinámicos
+    # 11.4 Encabezados dinámicos
     ws["C2"] = "Desglose de Pago"
     ws["C4"] = "CAMPOS NO EDITABLES"
     ws["G2"] = "REFERENCIA DE PAGO"
@@ -109,16 +104,14 @@ def exportar_template(
     ws["F8"] = "DIFERENCIA"
     ws["G8"] = hrc_template["Pago Neto"].sum()
 
-    # 4. Formatos numéricos
+    # 11.5 Formatos numéricos y de texto
     for cell in ["G6", "G7", "G8", "F12"]:
         ws[cell].number_format = '#,##0.00'
-
     num_cols = ["Importe de factura", "Pago Neto"]
     for col in num_cols:
         col_idx = hrc_template.columns.get_loc(col) + 3
         for row in range(18, 18 + len(hrc_template) + 1):
             ws.cell(row=row, column=col_idx).number_format = '#,##0.00'
-
     str_cols = ["Tipo de Documento", "Referencia / Factura", "Descuento", "Motivo del descuento", "Comentarios"]
     for col in str_cols:
         col_idx = hrc_template.columns.get_loc(col) + 3
@@ -128,7 +121,7 @@ def exportar_template(
             if col != "Comentarios":
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # 5. Colores
+    # 11.6 Colores en celdas clave
     for cell in ["G2", "C6", "C7", "C8", "F6", "F7", "F8", "C11", "D11", "E11",
                  "F11", "C18", "D18", "E18", "F18", "G18", "H18", "I18"]:
         ws[cell].fill = azul_oscuro
@@ -139,17 +132,14 @@ def exportar_template(
     ws["H2"].fill = amarillo
     ws["H2"].font = letra_negra
 
-    # 6. Ajuste de columnas
-    # Ajuste de columnas dinámico considerando formato de números
+    # 11.7 Ajuste dinámico de ancho de columnas
     for i, col in enumerate(ws.columns, start=1):
         max_length = 0
         col_letter = get_column_letter(i)
         for cell in col:
             try:
-                # Convertimos el valor al string formateado si tiene number_format
                 if cell.value is not None:
                     if isinstance(cell.value, (int, float)) and cell.number_format:
-                        # Simular cómo se ve en Excel
                         val_str = f"{cell.value:,.2f}" if "0.00" in cell.number_format else str(cell.value)
                     else:
                         val_str = str(cell.value)
@@ -158,12 +148,11 @@ def exportar_template(
                 pass
         ws.column_dimensions[col_letter].width = max_length + 2
 
-
-    # 7. Copiar hoja Remittance idéntica
+    # 11.8 Copiar hoja Remittance original al archivo final
     wb_rem = load_workbook(ruta_remittance, data_only=False)
     ws_original = wb_rem.active
     copiar_hoja(ws_original, wb, nombre="Remittance")
 
-    # Guardar
+    # 11.9 Guardar archivo final
     wb.save(ruta_salida)
     print(f"✅ Archivo exportado con formato: {ruta_salida}")

@@ -1,53 +1,62 @@
-import pandas as pd
-import numpy as np
-from openpyxl import load_workbook
-import os, sys
-from .formato_template import exportar_template
+import sys  # Para detectar ejecución empaquetada (frozen) y resolver rutas
+import os   # Para construir rutas relativas al proyecto
+import pandas as pd  # Principal herramienta para manipulación tabular
+import numpy as np   # Utilidades numéricas/condicionales (np.select, np.where)
+from openpyxl import load_workbook  # Leer valores dinámicos desde archivos Excel
+from .formato_template import exportar_template  # Paso 12: exportar con formato
+from .diferencias import procesar_diferencias    # Paso 7/10: lógica centralizada de diferencias
 
 
 def _project_root():
     """
     Devuelve la carpeta raíz del proyecto:
-    - Si corre dentro de un .app -> la carpeta que contiene el .app
-    - Si corre como script -> la carpeta del archivo actual (../)
+    - Si corre dentro de un .app -> carpeta que contiene el .app
+    - Si corre como script -> carpeta del archivo actual (../)
     """
     if getattr(sys, "frozen", False):
-        macos_dir = os.path.dirname(sys.executable)      # .../MyApp.app/Contents/MacOS
-        contents_dir = os.path.dirname(macos_dir)        # .../MyApp.app/Contents
-        app_bundle = os.path.dirname(contents_dir)       # .../MyApp.app
-        return os.path.dirname(app_bundle)               # carpeta que contiene el .app
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
 def procesar():
+    """
+    Orquestador principal para Farmatodo:
+    Flujo numerado (1..12) siguiendo el estándar de procesos.
+    Devuelve el DataFrame final listo para exportar.
+    """
     root = _project_root()
 
-    # --- Rutas ---
+    # --- Paso 0: Rutas ---
     rutas = {
         "remittance": os.path.join(root, "Archivos", "Remittance", "Remittance_farmatodo.xlsx"),
         "fbl5n": os.path.join(root, "Archivos", "Base_de_datos", "FBL5N_farmatodo.xlsx"),
         "salida": os.path.join(root, "Archivos", "Template", "Template_HRC_farmatodo.xlsx"),
     }
 
-    # --- Paso 1: Leer Remittance ---
+    # =====================================================
+    # 1. Lectura de Remittance
+    # =====================================================
     remittance = pd.read_excel(rutas["remittance"], skiprows=6, nrows=20, header=[0, 1])
     remittance.columns = [
         str(col[0]).strip() if "Unnamed" in str(col[1]) else str(col[1]).strip()
         for col in remittance.columns
     ]
     remittance = remittance[["Nro Factura", "Descripción", "Total"]]
-    # Eliminar filas donde 'Nro Factura' es NaN
     remittance = remittance.dropna(subset=["Nro Factura"]).reset_index(drop=True)
     remittance = remittance.rename(columns={
         "Nro Factura": "Referencia / Factura",
         "Total": "Importe de factura"
     })
     remittance["Importe de factura"] = pd.to_numeric(remittance["Importe de factura"], errors="coerce").round(2)
-    # Limpiar caracteres Unicode invisibles y espacios
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.replace(r"[\u202A-\u202E\u200E\u200F]", "", regex=True)
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.strip()
+    # Limpiar caracteres invisibles
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.replace(r"[\u202A-\u202E\u200E\u200F]", "", regex=True).str.strip()
 
-    # --- Paso 2: Tipo de Documento ---
+    # =====================================================
+    # 2. Tipo de Documento
+    # =====================================================
     conds = [
         remittance["Referencia / Factura"].str.startswith("PMP", na=False) & (remittance["Importe de factura"] > 0),
         ~remittance["Referencia / Factura"].str.startswith("PMP", na=False) & (remittance["Importe de factura"] > 0),
@@ -56,7 +65,9 @@ def procesar():
     choices = ["Factura", "Nota Debito", "Descuentos no asociados a FC"]
     remittance["Tipo de Documento"] = np.select(conds, choices, default="")
 
-    # --- Paso 3: Descuentos y motivos ---
+    # =====================================================
+    # 3. Descuentos y motivos
+    # =====================================================
     if "Descuento" not in remittance.columns:
         remittance["Descuento"] = ""
     if "Motivo del descuento" not in remittance.columns:
@@ -80,10 +91,14 @@ def procesar():
     remittance["Descuento"] = np.select(conds_desc, descuentos, default=remittance["Descuento"])
     remittance["Motivo del descuento"] = np.select(conds_desc, motivos, default=remittance["Motivo del descuento"])
 
-    # --- Paso 4: Ordenar ---
+    # =====================================================
+    # 4. Ordenar por tipo de documento
+    # =====================================================
     remittance = remittance.sort_values(by="Tipo de Documento", ascending=False).reset_index(drop=True)
 
-    # --- Paso 5: Leer FBL5N ---
+    # =====================================================
+    # 5. Lectura de FBL5N
+    # =====================================================
     FBL5N = pd.read_excel(
         rutas["fbl5n"],
         sheet_name="Sheet1",
@@ -94,7 +109,6 @@ def procesar():
         "Reference": "Referencia / Factura",
         "Amount in local currency": "importe_FBL5N"
     }).reset_index(drop=True)
-
     # Ajustar notas de crédito
     FBL5N["Referencia / Factura"] = np.where(
         FBL5N["Reason code"] == "NRO",
@@ -102,57 +116,36 @@ def procesar():
         FBL5N["Referencia / Factura"]
     )
 
-    # --- Paso 6: Merge ---
+    # =====================================================
+    # 6. Merge entre Remittance y FBL5N
+    # =====================================================
     hrc_template = pd.merge(remittance, FBL5N, on="Referencia / Factura", how="left")
     hrc_template["Referencia / Factura"] = hrc_template["Referencia / Factura"].str.replace(r"^NC-", "", regex=True)
 
-    # --- Paso 7: Diferencias ---
-    hrc_template["Diferencia"] = pd.NA
-    hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
-        hrc_template["importe_FBL5N"] - hrc_template["Importe de factura"]
-    )
+    # =====================================================
+    # 7. Procesar diferencias
+    # =====================================================
+    hrc_template = procesar_diferencias(hrc_template)
 
-    diferencias = hrc_template[hrc_template["Diferencia"].notna() & (hrc_template["Diferencia"] != 0)].copy()
-    registros_diferencias = pd.DataFrame({
-        "Referencia / Factura": diferencias["Referencia / Factura"],
-        "Descripción": diferencias["Descripción"],
-        "Importe de factura": diferencias["Diferencia"],
-        "Tipo de Documento": "Descuentos no asociados a FC",
-        "Pago Neto": "",
-        "Descuento": "MENORES VALORES",
-        "Motivo del descuento": np.select(
-            condlist=[
-                (diferencias["Diferencia"] <= -20000) | (diferencias["Diferencia"] >= 20000),
-                (diferencias["Diferencia"].between(-20000, 0, inclusive="neither")),
-                (diferencias["Diferencia"].between(0, 20000, inclusive="left"))
-            ],
-            choicelist=["987", "WOB", "384"],
-            default="Error (Revisar)"
-        )
-    })
-
-    hrc_template = pd.concat([hrc_template, registros_diferencias], ignore_index=True)
-
-    # --- Paso 4: Comentarios y campos finales ---
+    # =====================================================
+    # 8. Comentarios y limpieza de CNQ*
+    # =====================================================
     hrc_template["Comentarios"] = np.where(
         hrc_template["Tipo de Documento"] == "Factura", "",
         np.where(
             hrc_template["Descuento"] == "MENORES VALORES",
             hrc_template["Descuento"],
-            hrc_template["Descuento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("") + " " + hrc_template[ "Descripción"].fillna("")
+            hrc_template["Descuento"].fillna("") + " " + hrc_template["Referencia / Factura"].fillna("") + " " + hrc_template["Descripción"].fillna("")
         )
     )
-    cond_1 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] < -20000)
-    cond_2 = (hrc_template["Motivo del descuento"] == "987") & (hrc_template["Importe de factura"] > 20000)
-    hrc_template.loc[cond_1, "Comentarios"] = "Myr Vlr Pagado" + hrc_template.loc[cond_1, "Referencia / Factura"].fillna("")
-    hrc_template.loc[cond_2, "Comentarios"] = "Saldo FC " + hrc_template.loc[cond_2, "Referencia / Factura"].fillna("")
-    
+    hrc_template = hrc_template[~hrc_template["Referencia / Factura"].astype(str).str.startswith("CNQ", na=False)]
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
-    # --- Paso 9: Notas de Crédito ---
+    # =====================================================
+    # 9. Notas de Crédito
+    # =====================================================
     nota_credito = FBL5N[FBL5N["Reason code"] == "NRO"].copy()
     nota_credito["Tipo de Documento"] = "Nota de Crédito"
-
     hrc_template = pd.concat([hrc_template, nota_credito], ignore_index=True)
     hrc_template.loc[
         hrc_template["Tipo de Documento"] == "Nota de Crédito",
@@ -162,31 +155,36 @@ def procesar():
         ["importe_FBL5N", "importe_FBL5N", "Text", "Reason code"]
     ].values
 
-    # --- Paso 10: Columnas finales ---
+    # =====================================================
+    # 10. Columnas finales
+    # =====================================================
     columnas_finales = [
         "Tipo de Documento", "Referencia / Factura", "Importe de factura",
         "Descuento", "Motivo del descuento", "Pago Neto", "Comentarios"
     ]
     hrc_template = hrc_template[columnas_finales]
 
-    # --- Paso 11: Datos dinámicos ---
+    # =====================================================
+    # 11. Datos dinámicos para exportar (orden de pago, cliente)
+    # =====================================================
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     ws_rem = wb_rem.active
     numero_orden = ws_rem["B7"].value
 
-    fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n["Customer"].iloc[0]
-    nombre_cliente = fbl5n["Name 1"].iloc[0]
+    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
+    id_cliente = fbl5n_meta["Customer"].iloc[0]
+    nombre_cliente = fbl5n_meta["Name 1"].iloc[0]
 
-
-    # --- Paso 12: Exportar con formato genérico ---
+    # =====================================================
+    # 12. Exportar Template final con formato y hoja Remittance
+    # =====================================================
     exportar_template(
-        hrc_template,
-        numero_orden,
-        id_cliente,
-        nombre_cliente,
-        rutas["remittance"],
-        rutas["salida"]
+        hrc_template=hrc_template,
+        numero_orden=numero_orden,
+        id_cliente=id_cliente,
+        nombre_cliente=nombre_cliente,
+        ruta_remittance=rutas["remittance"],
+        ruta_salida=rutas["salida"]
     )
 
     return hrc_template
