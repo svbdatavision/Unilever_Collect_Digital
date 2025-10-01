@@ -4,8 +4,8 @@ import pandas as pd  # Principal herramienta para manipulación tabular
 import numpy as np   # Utilidades numéricas/condicionales (np.select, np.where)
 from openpyxl import load_workbook  # Leer valores dinámicos desde archivos Excel
 # Usamos imports relativos para integrarlos en el paquete.
-from .formato_template import exportar_template  # Paso 11: exportar con formato
-from .diferencias import procesar_diferencias    # Paso 9: lógica centralizada de diferencias
+from clientes.utils.formato_template import exportar_template  # Paso 11: exportar con formato
+from clientes.utils.diferencias import procesar_diferencias    # Paso 9: lógica centralizada de diferencias
 
 
 def _project_root():
@@ -20,7 +20,7 @@ def _project_root():
         contents_dir = os.path.dirname(macos_dir)        # .../MyApp.app/Contents
         app_bundle = os.path.dirname(contents_dir)       # .../MyApp.app
         return os.path.dirname(app_bundle)               # carpeta que contiene el .app
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def procesar():

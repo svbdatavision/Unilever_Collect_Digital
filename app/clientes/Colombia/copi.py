@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from openpyxl import load_workbook
-from .formato_template import exportar_template
+from clientes.utils.formato_template import exportar_template
+from clientes.utils.diferencias import procesar_diferencias
 
 import os
 # Asegúrate de que esta importación sea válida en tu entorno
@@ -21,7 +22,7 @@ def _project_root():
         contents_dir = os.path.dirname(macos_dir)
         app_bundle = os.path.dirname(contents_dir)
         return os.path.dirname(app_bundle)
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 def procesar():
     root = _project_root()

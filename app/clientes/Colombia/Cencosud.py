@@ -7,8 +7,8 @@ import camelot
 from PyPDF2 import PdfReader
 from openpyxl import load_workbook
 import io
-from .formato_template import exportar_template
-from .diferencias import procesar_diferencias
+from clientes.utils.formato_template import exportar_template
+from clientes.utils.diferencias import procesar_diferencias
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
@@ -21,7 +21,7 @@ def _project_root():
         contents_dir = os.path.dirname(macos_dir)
         app_bundle = os.path.dirname(contents_dir)
         return os.path.dirname(app_bundle)
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def procesar():

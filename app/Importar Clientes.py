@@ -1,7 +1,7 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from clientes import olimpica, farmatodo, D1, copi, Cencosud, Euro
+from clientes.Colombia import olimpica, farmatodo, D1, copi, Cencosud, Euro
 
 # Registro de clientes
 CLIENTES = {

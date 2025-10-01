@@ -3,8 +3,8 @@ import os   # Para construir rutas relativas al proyecto
 import pandas as pd  # Principal herramienta para manipulación tabular
 import numpy as np   # Utilidades numéricas/condicionales (np.select, np.where)
 from openpyxl import load_workbook  # Leer valores dinámicos desde archivos Excel
-from .formato_template import exportar_template  # Paso 12: exportar con formato
-from .diferencias import procesar_diferencias    # Paso 7/10: lógica centralizada de diferencias
+from clientes.utils.formato_template import exportar_template # Paso 12: exportar con formato
+from clientes.utils.diferencias import procesar_diferencias # Paso 7/10: lógica centralizada de diferencias
 
 
 def _project_root():
@@ -18,7 +18,7 @@ def _project_root():
         contents_dir = os.path.dirname(macos_dir)
         app_bundle = os.path.dirname(contents_dir)
         return os.path.dirname(app_bundle)
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def procesar():
