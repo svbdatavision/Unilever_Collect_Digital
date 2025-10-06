@@ -29,10 +29,9 @@ def procesar():
     
     # --- Rutas ---
     rutas = {
-        "remittance": os.path.join(root, "Archivos", "Remittance", "Remittance_copi.xlsx"),
-        "fbl5n": os.path.join(root, "Archivos", "Base_de_datos", "FBL5N_copi.xlsx"),
-        "fbl3n": os.path.join(root, "Archivos", "Base_de_datos", "FBL3N.xlsx"),
-        "salida": os.path.join(root, "Archivos", "Template", "Template_HRC_copi.xlsx")
+        "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_copi.xlsx"),
+        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_copi.xlsx"),
+        "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_copi.xlsx")
     }
 
     # --- Paso 1: Leer Remittance ---

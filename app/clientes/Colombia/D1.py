@@ -34,9 +34,9 @@ def procesar():
 
     # --- Rutas ---
     rutas = {
-        "remittance_pdf": os.path.join(root, "Archivos", "Remittance", "Remittance_D1.pdf"),  # D1
-        "fbl5n": os.path.join(root, "Archivos", "Base_de_datos", "FBL5N_d1.xlsx"),  # D1
-        "salida": os.path.join(root, "Archivos", "Template", "Template_HRC_D1.xlsx")  # D1
+        "remittance_pdf": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_D1.pdf"),  # D1
+        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_d1.xlsx"),  # D1
+        "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_D1.xlsx")  # D1
     }
 
     # =====================================================
