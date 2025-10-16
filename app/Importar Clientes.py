@@ -1,7 +1,7 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from clientes.Colombia import olimpica, farmatodo, D1, copi, Cencosud, Euro
+from clientes.Colombia import olimpica, farmatodo, D1, copi, Cencosud
 
 # Registro de clientes
 CLIENTES = {
@@ -9,8 +9,8 @@ CLIENTES = {
     "Farmatodo": farmatodo.procesar,
     "D1": D1.procesar,
     "Copidrogas": copi.procesar,
-    "Cencosud": Cencosud.procesar,
-    "Euro" : Euro.procesar
+    "Cencosud": Cencosud.procesar
+    #"Euro" : Euro.procesar
 }
 
 # Función que se ejecuta al hacer clic en el botón
