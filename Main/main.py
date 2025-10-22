@@ -1,7 +1,7 @@
 import flet as ft
 import os
 from Peru import Template_Cencosud,Template_mayorsa,Template_NF,Template_SPSA,Template_Tottus
-from Colombia import Cencosud,copi,D1,farmatodo,olimpica
+from Colombia import Cencosud,copi,D1,farmatodo,olimpica,Euro
 
 archivos_remittance = []
 archivo_fbl5n = None
@@ -10,7 +10,7 @@ pais_actual = None
 paises = ["Peru", "Colombia", "Ecuador"]
 clientes_por_pais = {
     "Peru": ["Cencosud Peru", "Mayorsa", "Nortfarma", "SPSA", "Tottus"],
-    "Colombia": ["Cencosud Colombia","Copidrogas", "D1","Farmatodo","Olimpica"],
+    "Colombia": ["Cencosud Colombia","Copidrogas", "D1","Farmatodo","Olimpica","Euro"],
     "Ecuador": []
 }
 
@@ -27,9 +27,9 @@ def main(page: ft.Page):
         label="Seleccionar cliente",
         width=350,
         options=[],
-        bgcolor="#261E97",
+        bgcolor="#FFFFFF",
         border_color="#261E97",
-        color="#000000"  
+        color="#FFFFFF"  
     )
     
     pais_label = ft.Text("", size=18, weight="w600", color="#2E23C9")
@@ -159,7 +159,8 @@ def main(page: ft.Page):
             "Copidrogas": copi,
             "D1": D1,
             "Farmatodo":farmatodo,
-            "Olimpica": olimpica
+            "Olimpica": olimpica,
+            "Euro": Euro
         }
 
         try:

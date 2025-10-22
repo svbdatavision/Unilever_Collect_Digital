@@ -17,22 +17,15 @@ import os
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
-def procesar(archivo_fbl5n,archivo_remmitance):
+def procesar(archivo_remittance,archivo_fbl5n):
 
     rutas = {
     "remittance": archivo_remittance,
     "fbl5n": archivo_fbl5n,
         # Si necesitas una ruta de salida, puedes definirla aquí:
-    "salida": os.path.join(os.path.dirname(archivo_remittance), "Copidrogas.xlsx")}
-    #root = _project_root()
+        "salida": os.path.join(os.path.dirname(archivo_remittance), "Copidrogas.xlsx")
+    }
     
-    # --- Rutas ---
-    #rutas = {
-    #    "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_copi.xlsx"),
-#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
-    #    "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_copi.xlsx"),
-    #    "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_copi.xlsx")
-    #}
     # Colocar el Customer ID del cliente
     customer_id = 10267298
 
