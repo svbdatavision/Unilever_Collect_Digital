@@ -7,7 +7,7 @@ import numpy as np
     # =====================================================
     # Llamamos a la función reutilizable que crea las filas de "MENORES VALORES"
 
-def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
+def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame: 
 
     # 8.1 Crear columna de diferencia solo para Facturas
     hrc_template["Diferencia"] = pd.NA
@@ -81,11 +81,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     # 8.5 Concatenar diferencias al template original
     hrc_template = pd.concat([hrc_template, registros_diferencias], ignore_index=True)
 
-    # Parche Valores de descuentos
-    hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
-    hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),
-    hrc_template["Importe de Remittance"]
-    )
+
 
 #    hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
 #    hrc_template["Descuento"] != "Rechazo",

@@ -6,25 +6,32 @@ import os
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
-from utils import *
+from clientes.utils import *
 
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
+def _project_root():
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
-def procesar(archivo_remittance,archivo_fbl5n):
-
+def procesar():
+    root = _project_root()
 
     rutas = {
-        "remittance": archivo_remittance,
-        "fbl5n": archivo_fbl5n,
-        # Si necesitas una ruta de salida, puedes definirla aquí:
-        "salida": os.path.join(os.path.dirname(archivo_remittance), "Olimpica.xlsx")
+        "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_olimpica.xlsx"),
+#        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N.xlsx"),
+        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_olimpica.xlsx"),
+        "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_olimpica.xlsx")
     }
-
+    # Colocar el Customer ID del cliente
     customer_id = 10266237
 
     # =====================================================
@@ -122,7 +129,12 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 11. Cálculo de diferencias
     # =====================================================
-    hrc_template = procesar_diferencias(hrc_template)
+#    hrc_template = procesar_diferencias(hrc_template)
+    # Parche Valores de descuentos
+    hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
+    hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),
+    hrc_template["Importe de Remittance"]
+    )
 
     # =====================================================
     # 12. Agregamos registros NRO

@@ -4,6 +4,7 @@
 
 import os       # Manejo de rutas y directorios del sistema operativo
 import sys      # Detección de ejecución empaquetada y manipulación de rutas del intérprete
+import re       # Expresiones regulares (búsqueda y limpieza de texto)
 import io        # Manejo de flujos de datos en memoria (buffers, streams)
 import warnings # Control de advertencias del sistema y librerías externas
 
@@ -13,7 +14,7 @@ import camelot   # Extracción de tablas desde archivos PDF
 from PyPDF2 import PdfReader  # Lectura y procesamiento de archivos PDF
 from openpyxl import load_workbook  # Lectura de archivos Excel (.xlsx)
 
-from utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
 # Configuración de advertencias
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Suprime advertencias generadas por Camelot (usualmente por manejo de PDFs)
@@ -22,20 +23,41 @@ warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Supr
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
+def _project_root():
+    """
+    Obtiene la ruta base del proyecto sin importar el entorno de ejecución.
+
+    - Si el código se ejecuta empaquetado (por ejemplo, como .app o .exe),
+      sube desde la ruta del ejecutable hasta la carpeta que contiene el proyecto.
+    - Si se ejecuta como script Python normal, sube dos niveles desde
+      el archivo actual (../..), asumiendo la estructura estándar del proyecto.
+
+    Devuelve:
+        str: Ruta absoluta a la carpeta raíz del proyecto.
+    """
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
-def procesar(archivo_remmitance,archivo_FBL5N):
+def procesar():
     """
     Orquestador principal para Cencosud
     """
-    rutas = {
-    "remittance": archivo_remittance,
-    "fbl5n": archivo_fbl5n,
-        # Si necesitas una ruta de salida, puedes definirla aquí:
-    "salida": os.path.join(os.path.dirname(archivo_remittance), "Cencosud.xlsx")
+    root = _project_root()
 
+    # --- Rutas de entrada/salida ---
+    rutas = {
+        "pdf_remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),  # Cencosud
+#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
+        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_Cenco.xlsx"),
+        "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_Cenco.xlsx")
+    }
     # Colocar el Customer ID del cliente
     customer_id = 10267301
 
