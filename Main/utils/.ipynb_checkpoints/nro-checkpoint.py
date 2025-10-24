@@ -26,6 +26,7 @@ def procesamiento_nro(hrc_template, FBL5N):
 
     # Completar columnas específicas directamente en notas_credito
 #    notas_credito["Pago Neto"] = notas_credito["Importe de factura"]
+    notas_credito["Referencia / Factura"] = notas_credito["Document Number"]
     notas_credito["Comentarios"] = notas_credito["Text"]
     notas_credito["Motivo del descuento"] = ""
     notas_credito["Descuento"] = "NRO"

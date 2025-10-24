@@ -13,8 +13,13 @@ from openpyxl import load_workbook
 import io
 import unicodedata
 import pdfplumber, re, statistics, pandas as pd
- 
-from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+
+# Buscamos las funciones en la carpeta Main
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
+sys.path.append(project_root)
+from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+#from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
  
 # Configuración de advertencias
