@@ -68,10 +68,11 @@ def procesar(archivo_remittance,archivo_fbl5n):
         remittance["Tipo de Documento"].str.startswith("Devolucion", na=False),
         remittance["Tipo de Documento"].str.startswith("Reduc Factura Compra", na=False),
         remittance["Tipo de Documento"].str.startswith("Traslado Notas  Deudor acreedor", na=False),
-       
+        remittance["Tipo de Documento"].str.startswith("Traslado proximo Pago proveedor", na=False),
+        remittance["Tipo de Documento"].str.startswith("Nota de reintegro", na=False),       
     ]
-    descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR"]
-    motivos = ["522", "987", "CSB"]
+    descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR", "REVISAR", "NOTA CLIENTE"]
+    motivos = ["522", "987", "CSB","987", "987"]
     remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
     remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
 
@@ -92,9 +93,9 @@ def procesar(archivo_remittance,archivo_fbl5n):
     
 
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
-        "Factura Acrededor": "Factura",
-        "Devolucion": "Descuentos Clientes",
-        "Reduc Factura Compra": "Descuentos Clientes"
+        "Factura Acrededor": "Factura"
+#        "Devolucion": "Descuentos Clientes",
+#        "Reduc Factura Compra": "Descuentos Clientes"
     })
     
     # =====================================================
@@ -102,6 +103,10 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     
     remittance = procesar_descuentos_y_comentarios(remittance)
+    
+    # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
+    condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Referencia / Factura"].astype(str).str.strip() == "")
+    remittance.loc[condicion, "Comentario"] = remittance["Texto"]
 
     # =====================================================
     # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)

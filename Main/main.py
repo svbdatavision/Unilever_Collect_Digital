@@ -1,17 +1,55 @@
 import flet as ft
 import os
-from Peru import Template_Cencosud,Template_mayorsa,Template_NF,Template_SPSA,Template_Tottus
-from Colombia import Cencosud,copi,D1,farmatodo,olimpica,Euro
+from Peru import (
+    Template_Cencosud,
+    Template_mayorsa,
+    Template_NF,
+    Template_SPSA,
+    Template_Tottus
+)
+
+from Colombia import (
+    Cencosud,
+    copi,
+    D1,
+    farmatodo,
+    olimpica,
+    Euro,
+    oxxo,
+    El_Rosado
+)
 
 archivos_remittance = []
 archivo_fbl5n = None
 pais_actual = None
 
-paises = ["Peru", "Colombia", "Ecuador"]
+paises = [
+    "Peru",
+    "Colombia",
+    "Ecuador"
+]
+
 clientes_por_pais = {
-    "Peru": ["Cencosud Peru", "Mayorsa", "Nortfarma", "SPSA", "Tottus"],
-    "Colombia": ["Cencosud Colombia","Copidrogas", "D1","Farmatodo","Olimpica","Euro"],
-    "Ecuador": []
+    "Peru": [
+        "Cencosud Peru",
+        "Mayorsa",
+        "Nortfarma",
+        "SPSA",
+        "Tottus"
+    ],
+    "Colombia": [
+        "Cencosud Colombia",
+        "Copidrogas",
+        "D1",
+        "Farmatodo",
+        "Olimpica",
+        "Euro",
+        "Oxxo",
+        "El_Rosado_Mico"
+    ],
+    "Ecuador": [
+        # Agregar clientes de Ecuador aquí
+    ]
 }
 
 def main(page: ft.Page):
@@ -29,7 +67,7 @@ def main(page: ft.Page):
         options=[],
         bgcolor="#FFFFFF",
         border_color="#261E97",
-        color="#FFFFFF"  
+        color="#FFFFFF"
     )
     
     pais_label = ft.Text("", size=18, weight="w600", color="#2E23C9")
@@ -135,7 +173,12 @@ def main(page: ft.Page):
 
     def procesar_cliente(e):
         cliente = cliente_dropdown.value
-        clientes_solo_remittance = ["Cencosud Peru", "Nortfarma", "SPSA", "Tottus"]
+        clientes_solo_remittance = [
+            "Cencosud Peru", 
+            "Nortfarma", 
+            "SPSA", 
+            "Tottus"
+        ]
 
         if not archivos_remittance:
             page.dialog = ft.AlertDialog(title=ft.Text("⚠️ Por favor, adjunta al menos un archivo Remittance."))
@@ -155,27 +198,49 @@ def main(page: ft.Page):
             "Nortfarma": Template_NF,
             "SPSA": Template_SPSA,
             "Tottus": Template_Tottus,
-            "Cencosud COlimbia": Cencosud,
+            "Cencosud Colombia": Cencosud,
             "Copidrogas": copi,
             "D1": D1,
-            "Farmatodo":farmatodo,
+            "Farmatodo": farmatodo,
             "Olimpica": olimpica,
-            "Euro": Euro
+            "Euro": Euro,
+            "Oxxo": oxxo,
+            "El_Rosado_Mico": El_Rosado
         }
 
         try:
             if cliente in procesadores:
+                total_exportados = 0
+
                 for archivo in archivos_remittance:
-                    procesadores[cliente].procesar(archivo.path, archivo_fbl5n)
-                page.dialog = ft.AlertDialog(title=ft.Text(f"✅ {len(archivos_remittance)} archivo(s) procesado(s) para {cliente}."))
+                    resultado = procesadores[cliente].procesar(archivo.path, archivo_fbl5n)
+
+                    # Soporte para múltiples salidas
+                    if isinstance(resultado, (list, tuple, dict)):
+                        for i, _ in enumerate(
+                            resultado if not isinstance(resultado, dict) else resultado.values(), start=1
+                        ):
+                            total_exportados += 1
+                            print(f"✅ Archivo exportado #{total_exportados} para {cliente}")
+                    else:
+                        total_exportados += 1
+                        print(f"✅ Archivo exportado #{total_exportados} para {cliente}")
+
+                page.dialog = ft.AlertDialog(
+                    title=ft.Text(f"✅ {total_exportados} archivo(s) generado(s) para {cliente}.")
+                )
                 page.dialog.open = True
                 page.update()
+
             else:
                 page.dialog = ft.AlertDialog(title=ft.Text("⚠️ Por favor, selecciona un cliente válido."))
                 page.dialog.open = True
                 page.update()
+
         except Exception as ex:
-            print(f"Error procesando {cliente}: {ex}")
+            import traceback
+            traceback.print_exc()
+            print(f"❌ Error procesando {cliente}: {ex}")
             page.dialog = ft.AlertDialog(title=ft.Text(f"❌ Error: {ex}"))
             page.dialog.open = True
             page.update()

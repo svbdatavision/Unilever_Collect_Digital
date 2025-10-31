@@ -7,12 +7,14 @@ import numpy as np
 from datetime import datetime
 from openpyxl import load_workbook
 import io
+import os
+
 # Buscamos las funciones en la carpeta Main
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
 sys.path.append(project_root)
 from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
-import os
+
 
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
@@ -85,10 +87,11 @@ def procesar():
         remittance["Tipo de Documento"].str.startswith("Devolucion", na=False),
         remittance["Tipo de Documento"].str.startswith("Reduc Factura Compra", na=False),
         remittance["Tipo de Documento"].str.startswith("Traslado Notas  Deudor acreedor", na=False),
-       
+        remittance["Tipo de Documento"].str.startswith("Traslado proximo Pago proveedor", na=False),
+        remittance["Tipo de Documento"].str.startswith("Nota de reintegro", na=False),
     ]
-    descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR"]
-    motivos = ["522", "987", "CSB"]
+    descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR", "REVISAR", "NOTA CLIENTE"]
+    motivos = ["522", "987", "CSB", "987", "987"]
     remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
     remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
 
@@ -105,13 +108,13 @@ def procesar():
     # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
     condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
     remittance.loc[condicion, "Descuento"] = "DESCUENTO"
-    remittance.loc[condicion, "Motivo del descuento"] = 987
+    remittance.loc[condicion, "Motivo del descuento"] = "987"
     
 
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
-        "Factura Acrededor": "Factura",
-        "Devolucion": "Descuentos Clientes",
-        "Reduc Factura Compra": "Descuentos Clientes"
+        "Factura Acrededor": "Factura"
+#        "Devolucion": "Descuentos Clientes",
+#        "Reduc Factura Compra": "Descuentos Clientes"
     })
     
     # =====================================================
@@ -119,6 +122,10 @@ def procesar():
     # =====================================================
     
     remittance = procesar_descuentos_y_comentarios(remittance)
+    
+    # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
+    condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Referencia / Factura"].astype(str).str.strip() == "")
+    remittance.loc[condicion, "Comentario"] = remittance["Texto"]
 
     # =====================================================
     # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)
@@ -152,6 +159,9 @@ def procesar():
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
     
     hrc_template.loc[hrc_template["Tipo de Documento"] == "Nota de reintegro", ["Descuento", "Comentarios"]] = ""
+    
+    # No recuerdo que quisimos hacer aqui Richi.
+#    hrc_template = hrc_template.replace("nan", "Validar soporte")
 
     # =====================================================
     # 14. Definición de columnas finales para el template
