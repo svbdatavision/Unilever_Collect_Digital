@@ -15,7 +15,9 @@ from Colombia import (
     farmatodo,
     olimpica,
     Euro,
-    oxxo,
+    oxxo
+)
+from Ecuador import (
     El_Rosado
 )
 
@@ -44,11 +46,10 @@ clientes_por_pais = {
         "Farmatodo",
         "Olimpica",
         "Euro",
-        "Oxxo",
-        "El_Rosado_Mico"
+        "Oxxo"
     ],
     "Ecuador": [
-        # Agregar clientes de Ecuador aquí
+        "El_Rosado_Mico"
     ]
 }
 
