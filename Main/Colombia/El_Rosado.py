@@ -6,13 +6,12 @@ import warnings
 import pandas as pd
 import camelot
 import numpy as np
-from clientes.utils import *
+from utils import *
  
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
  
 
 def procesar(archivo_remittance,archivo_fbl5n):
-    root = _project_root()
     rutas = {
         "pdf_remittance": archivo_remittance,,
         "fbl5n": archivo_fbl5n,

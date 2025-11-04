@@ -33,7 +33,6 @@ def _project_root():
 # 2. Función principal del proceso (procesar)
 # =====================================================
 def procesar(archivo_remittance,archivo_fbl5n):
-       
     rutas = {
     "pdf_remittance": archivo_remittance,
     "fbl5n": archivo_fbl5n,

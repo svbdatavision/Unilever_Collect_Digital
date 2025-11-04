@@ -26,11 +26,10 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 2.1 Definición de rutas de entrada y salida
     # =====================================================
-    root = _project_root()
     rutas = {
-        "remittance": archivo_remittance,,
+        "remittance": archivo_remittance,
         "fbl5n": archivo_fbl5n,
-        "salida": os.path.join(os.path.dirname(archivo_remittance), "Oxxo.xlsx")
+        "salida": os.path.join(os.path.dirname(archivo_remittance))
     }
     customer_id = 10324901
 
