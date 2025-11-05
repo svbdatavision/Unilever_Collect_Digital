@@ -1,56 +1,18 @@
 import flet as ft
 import os
-from Peru import (
-    Template_Cencosud,
-    Template_mayorsa,
-    Template_NF,
-    Template_SPSA,
-    Template_Tottus
-)
-
-from Colombia import (
-    Cencosud,
-    copi,
-    D1,
-    farmatodo,
-    olimpica,
-    Euro,
-    oxxo
-)
-from Ecuador import (
-    El_Rosado
-)
+from Peru import Template_Cencosud, Template_mayorsa, Template_NF, Template_SPSA, Template_Tottus
+from Colombia import Cencosud, copi, D1, farmatodo, olimpica
+from Ecuador import  Favorita, FARCOMED, DIFARE, Mega_Santa_Maria, FARMAENLACE
 
 archivos_remittance = []
 archivo_fbl5n = None
 pais_actual = None
 
-paises = [
-    "Peru",
-    "Colombia",
-    "Ecuador"
-]
-
+paises = ["Peru", "Colombia", "Ecuador"]
 clientes_por_pais = {
-    "Peru": [
-        "Cencosud Peru",
-        "Mayorsa",
-        "Nortfarma",
-        "SPSA",
-        "Tottus"
-    ],
-    "Colombia": [
-        "Cencosud Colombia",
-        "Copidrogas",
-        "D1",
-        "Farmatodo",
-        "Olimpica",
-        "Euro",
-        "Oxxo"
-    ],
-    "Ecuador": [
-        "El_Rosado_Mico"
-    ]
+    "Peru": ["Cencosud Peru", "Mayorsa", "Nortfarma", "SPSA", "Tottus"],
+    "Colombia": ["Cencosud Colombia", "Copidrogas", "D1", "Farmatodo", "Olimpica"],
+    "Ecuador": ["Favorita", "FARCOMED", "DIFARE", "Mega Santa Maria", "Farmaenlace"]
 }
 
 def main(page: ft.Page):
@@ -66,18 +28,32 @@ def main(page: ft.Page):
         label="Seleccionar cliente",
         width=350,
         options=[],
-        bgcolor="#FFFFFF",
+        bgcolor="#261E97",
         border_color="#261E97",
-        color="#FFFFFF"
+        color="#000000"
     )
-    
+
     pais_label = ft.Text("", size=18, weight="w600", color="#2E23C9")
 
     remittance_status = ft.Text("Haz clic para adjuntar los Remittance", text_align="center", color="black")
     fbl5n_status = ft.Text("Haz clic para adjuntar el FBL5N", text_align="center", color="black")
 
-    remittance_uploader = ft.FilePicker(on_result=lambda e: handle_remittance(e))
-    fbl5n_uploader = ft.FilePicker(on_result=lambda e: handle_fbl5n(e))
+    def handle_remittance(e):
+        global archivos_remittance
+        archivos_remittance = e.files
+        remittance_status.value = f"{len(archivos_remittance)} archivo(s) Remittance cargado(s)"
+        remittance_drop_area.bgcolor = "#DFF5E1"
+        page.update()
+
+    def handle_fbl5n(e):
+        global archivo_fbl5n
+        archivo_fbl5n = e.files[0].path if e.files else None
+        fbl5n_status.value = "Archivo FBL5N cargado"
+        fbl5n_drop_area.bgcolor = "#DFF5E1"
+        page.update()
+
+    remittance_uploader = ft.FilePicker(on_result=handle_remittance)
+    fbl5n_uploader = ft.FilePicker(on_result=handle_fbl5n)
     page.overlay.extend([remittance_uploader, fbl5n_uploader])
 
     remittance_drop_area = ft.Container(
@@ -114,20 +90,6 @@ def main(page: ft.Page):
         alignment=ft.alignment.center,
         visible=False
     )
-
-    def handle_remittance(e):
-        global archivos_remittance
-        archivos_remittance = e.files
-        remittance_status.value = f"{len(archivos_remittance)} archivo(s) Remittance cargado(s)"
-        remittance_drop_area.bgcolor = "#DFF5E1"
-        page.update()
-
-    def handle_fbl5n(e):
-        global archivo_fbl5n
-        archivo_fbl5n = e.files[0].path if e.files else None
-        fbl5n_status.value = "Archivo FBL5N cargado"
-        fbl5n_drop_area.bgcolor = "#DFF5E1"
-        page.update()
 
     def limpiar_campos():
         global archivos_remittance, archivo_fbl5n
@@ -174,12 +136,7 @@ def main(page: ft.Page):
 
     def procesar_cliente(e):
         cliente = cliente_dropdown.value
-        clientes_solo_remittance = [
-            "Cencosud Peru", 
-            "Nortfarma", 
-            "SPSA", 
-            "Tottus"
-        ]
+        clientes_solo_remittance = ["Cencosud Peru", "Nortfarma", "SPSA", "Tottus"]
 
         if not archivos_remittance:
             page.dialog = ft.AlertDialog(title=ft.Text("⚠️ Por favor, adjunta al menos un archivo Remittance."))
@@ -204,44 +161,26 @@ def main(page: ft.Page):
             "D1": D1,
             "Farmatodo": farmatodo,
             "Olimpica": olimpica,
-            "Euro": Euro,
-            "Oxxo": oxxo,
-            "El_Rosado_Mico": El_Rosado
+            "Favorita": Favorita,
+            "FARCOMED": FARCOMED,
+            "Mega Santa Maria": Mega_Santa_Maria,
+            "Farmaenlace": FARMAENLACE,
+            "DIFARE": DIFARE
         }
 
         try:
             if cliente in procesadores:
-                total_exportados = 0
-
                 for archivo in archivos_remittance:
-                    resultado = procesadores[cliente].procesar(archivo.path, archivo_fbl5n)
-
-                    # Soporte para múltiples salidas
-                    if isinstance(resultado, (list, tuple, dict)):
-                        for i, _ in enumerate(
-                            resultado if not isinstance(resultado, dict) else resultado.values(), start=1
-                        ):
-                            total_exportados += 1
-                            print(f"✅ Archivo exportado #{total_exportados} para {cliente}")
-                    else:
-                        total_exportados += 1
-                        print(f"✅ Archivo exportado #{total_exportados} para {cliente}")
-
-                page.dialog = ft.AlertDialog(
-                    title=ft.Text(f"✅ {total_exportados} archivo(s) generado(s) para {cliente}.")
-                )
+                    procesadores[cliente].procesar(archivo.path, archivo_fbl5n)
+                page.dialog = ft.AlertDialog(title=ft.Text(f"✅ {len(archivos_remittance)} archivo(s) procesado(s) para {cliente}."))
                 page.dialog.open = True
                 page.update()
-
             else:
                 page.dialog = ft.AlertDialog(title=ft.Text("⚠️ Por favor, selecciona un cliente válido."))
                 page.dialog.open = True
                 page.update()
-
         except Exception as ex:
-            import traceback
-            traceback.print_exc()
-            print(f"❌ Error procesando {cliente}: {ex}")
+            print(f"Error procesando {cliente}: {ex}")
             page.dialog = ft.AlertDialog(title=ft.Text(f"❌ Error: {ex}"))
             page.dialog.open = True
             page.update()
@@ -279,8 +218,7 @@ def main(page: ft.Page):
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=8)
                 )
-            )
-            ], alignment="start"),
+            )], alignment="start"),
             logo,
             pais_label,
             cliente_dropdown,

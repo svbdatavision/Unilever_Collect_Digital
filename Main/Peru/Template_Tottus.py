@@ -17,10 +17,10 @@ TIPO_MAP = {
 PREFIJOS_A_ELIMINAR = ("08-", "07-", "00-", "01-")
 
 # --- NUEVO: DETECCIÓN ROBUSTA DE FILAS Y CAMPOS ---
+
 def extraer_tabla_pdf(archivo_pdf):
     doc = fitz.open(archivo_pdf)
     tabla_documentos = []
-    # Regex flexible: fecha, referencia, tipo, monto (permite variaciones)
     regex_fila = re.compile(
         r"(\d{2}\.\d{2}\.\d{4})\s+([A-Z0-9\-]+)\s+([\w\s\.\-]+?)\s+([\-]?\d{1,3}(?:[\.,]\d{3})*[\.,]\d{2})"
     )
@@ -28,18 +28,21 @@ def extraer_tabla_pdf(archivo_pdf):
         text = page.get_text()
         for match in regex_fila.findall(text):
             fecha, referencia, tipo_doc, monto_texto = match
-            # Limpieza de referencia
             for prefijo in PREFIJOS_A_ELIMINAR:
                 if referencia.startswith(prefijo):
                     referencia = referencia[len(prefijo):]
                     break
-            # Mapeo de tipo
             descripcion = TIPO_MAP.get(tipo_doc.strip(), tipo_doc.strip())
-            # Limpieza y signo de monto
             monto_texto = monto_texto.replace('.', '').replace(',', '.').replace(' ', '')
-            monto = -float(monto_texto.replace('-', '')) if '-' in monto_texto else float(monto_texto)
-            # Lógica de razón de descuento
+            monto = float(monto_texto.replace('-', ''))
             razon_descuento = 657 if descripcion == "Factura por convenio" else ""
+            
+            # ✅ Aplicar monto negativo si la razón de descuento es 657
+            if razon_descuento == 657 or TIPO_MAP.get(tipo_doc.strip()) == "Nota de crédito":
+                monto = -abs(monto)
+            else:
+                monto = -monto if '-' in monto_texto else monto
+
             tabla_documentos.append({
                 "Tipo de documento": descripcion,
                 "Referencia/ Factura": referencia,
@@ -47,6 +50,7 @@ def extraer_tabla_pdf(archivo_pdf):
                 "Razon de descuento": razon_descuento
             })
     return pd.DataFrame(tabla_documentos)
+
 
 def procesar(archivo_remittance, _):
     try:

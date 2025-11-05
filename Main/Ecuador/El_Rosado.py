@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
 
 def procesar(archivo_remittance,archivo_fbl5n):
     rutas = {
-        "pdf_remittance": archivo_remittance,,
+        "pdf_remittance": archivo_remittance,
         "fbl5n": archivo_fbl5n,
         "salida": os.path.join(os.path.dirname(archivo_remittance), "El_Rosado_Mico.xlsx")
     }

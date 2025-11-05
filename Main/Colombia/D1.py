@@ -12,15 +12,43 @@ from openpyxl import load_workbook
 from utils import *
 
 
+def _project_root():
+    """
+    Devuelve la carpeta raíz del proyecto:
+    - Si corre dentro de un .app (PyInstaller / py2app) -> carpeta que contiene el .app
+    - Si corre como script -> la carpeta del archivo actual (../)
+    """
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
 def procesar(archivo_remittance,archivo_fbl5n):
 
+
     rutas = {
-    "remittance": archivo_remittance,
-    "fbl5n": archivo_fbl5n,
+        "remittance": archivo_remittance,
+        "fbl5n": archivo_fbl5n,
         # Si necesitas una ruta de salida, puedes definirla aquí:
-    "salida": os.path.join(os.path.dirname(archivo_remittance), "D1.xlsx")
+        "salida": os.path.join(os.path.dirname(archivo_remittance), "D1.xlsx")
     }
-    
+    """
+    Proceso general para Remittance + FBL5N
+    Adaptable a cualquier cliente.
+    Incluye comentarios específicos para D1.
+    """
+    #root = _project_root()
+
+    # --- Rutas ---
+    #rutas = {
+       # "remittance_pdf": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_D1.pdf"),
+#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
+      #  "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_d1.xlsx"),
+     #   "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_D1.xlsx")
+    #}
 
     # =====================================================
     # 1. Lectura de Remitente
@@ -30,7 +58,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         r"RE\s+\d+\s+PMP\d+\s+\d{1,3}(?:\.\d{3})*\s+\d+\s+\d{1,3}(?:\.\d{3})*\s+\d+\s+\d{1,3}(?:\.\d{3})*"
     )
     facturas = []
-    with fitz.open(rutas["remittance_pdf"]) as doc:
+    with fitz.open(rutas["remittance"]) as doc:
         for page in doc:
             text = page.get_text()
             for match in factura_pattern.findall(text):

@@ -64,6 +64,7 @@ def exportar_template(
         else:
             return 1  # el resto en el medio
 
+    hrc_template = hrc_template.copy()
     hrc_template["_orden_motivo"] = hrc_template["Motivo del descuento"].apply(orden_motivo)
 
     # Ordenar: primero por la columna auxiliar (0 -> vacíos, 1 -> medio, 2 -> últimos),

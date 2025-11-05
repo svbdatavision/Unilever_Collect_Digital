@@ -11,6 +11,29 @@ from utils import * # imports relativos para integrarlos en el paquete
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
+def _project_root():
+    """
+    Obtiene la ruta base del proyecto sin importar el entorno de ejecución.
+
+    - Si el código se ejecuta empaquetado (por ejemplo, como .app o .exe),
+      sube desde la ruta del ejecutable hasta la carpeta que contiene el proyecto.
+    - Si se ejecuta como script Python normal, sube dos niveles desde
+      el archivo actual (../..), asumiendo la estructura estándar del proyecto.
+
+    Devuelve:
+        str: Ruta absoluta a la carpeta raíz del proyecto.
+    """
+    # Caso 1: el programa está empaquetado (ej. PyInstaller o app bundle)
+    if getattr(sys, "frozen", False):
+        # sys.executable apunta al ejecutable dentro del .app (Mac) o .exe (Windows)
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        # Devuelve la carpeta que contiene el .app (la raíz del proyecto)
+        return os.path.dirname(app_bundle)
+    # Caso 2: ejecución normal desde código fuente (.py)
+    # Sube dos niveles desde el archivo actual para llegar a la raíz del proyecto
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
 # 2. Función principal del proceso (procesar)
@@ -18,13 +41,28 @@ from utils import * # imports relativos para integrarlos en el paquete
 
 def procesar(archivo_remittance,archivo_fbl5n):
 
+
     rutas = {
-    "remittance": archivo_remittance,
-    "fbl5n": archivo_fbl5n,
+        "remittance": archivo_remittance,
+        "fbl5n": archivo_fbl5n,
         # Si necesitas una ruta de salida, puedes definirla aquí:
-    "salida": os.path.join(os.path.dirname(archivo_remittance), "Farmatodo.xlsx")
+        "salida": os.path.join(os.path.dirname(archivo_remittance), "Farmatodo.xlsx")
     }
-    
+    """
+    Orquestador principal para Farmatodo:
+    Flujo numerado (1..12) siguiendo el estándar de procesos.
+    Devuelve el DataFrame final listo para exportar.
+    """
+    # 1.1 Obtener ruta raíz del proyecto
+    #root = _project_root()
+
+    # 1.2 Definición de rutas de entrada y salida
+    #rutas = {
+     #   "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_farmatodo.xlsx"),
+      #  "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
+       # "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_farmatodo.xlsx"),
+       # "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_farmatodo.xlsx"),
+    #}
     # Colocar el Customer ID del cliente
     customer_id = 10324901
 

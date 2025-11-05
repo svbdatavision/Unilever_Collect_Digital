@@ -11,6 +11,13 @@ from utils import *
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
+def _project_root():
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
 # 2. Función principal del proceso (procesar)
@@ -25,6 +32,15 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Olimpica.xlsx")
     }
 
+    # root = _project_root()
+
+   #  rutas = {
+  #       "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_olimpica.xlsx"),
+#        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N.xlsx"),
+      #   "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_olimpica.xlsx"),
+    #     "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_olimpica.xlsx")
+   #  }
+    # Colocar el Customer ID del cliente
     customer_id = 10266237
 
     # =====================================================

@@ -1,0 +1,1 @@
+pais_actual = "Ecuador"
