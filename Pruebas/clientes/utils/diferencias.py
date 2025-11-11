@@ -1,3 +1,7 @@
+# =====================================================
+# 11. Cálculo de diferencias
+# =====================================================
+
 import pandas as pd
 import numpy as np
 
@@ -10,7 +14,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     """
 
     # =====================================================
-    # 8.1 Crear columna de diferencia solo para Facturas
+    # 11.1 Crear columna de diferencia solo para Facturas
     # =====================================================
     hrc_template["Diferencia"] = pd.NA
     hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
@@ -18,14 +22,14 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     )
 
     # =====================================================
-    # 8.2 Filtrar diferencias no nulas y no cero
+    # 11.2 Filtrar diferencias no nulas y no cero
     # =====================================================
     diferencias = hrc_template[
         hrc_template["Diferencia"].notna() & (hrc_template["Diferencia"] != 0)
     ].copy()
 
     # =====================================================
-    # 8.3 Separar grandes diferencias (>|20000|)
+    # 11.3 Separar grandes diferencias (>|20000|)
     # =====================================================
     grandes_dif = diferencias[
         (diferencias["Diferencia"] > 20000) | (diferencias["Diferencia"] < -20000)
@@ -36,20 +40,31 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     ].copy()
 
     # =====================================================
-    # 8.4 Crear líneas individuales para grandes diferencias
+    # 11.4 Crear líneas individuales para grandes diferencias
     # =====================================================
-    grandes_lineas = pd.DataFrame({
-        "Tipo de Documento": "Descuento Cliente",
-        "Referencia / Factura": grandes_dif["Referencia / Factura"],
-        "Importe de Remittance": grandes_dif["Diferencia"],
-        "Pago Neto": "",
-        "Descuento": "Myr Vlr Pagado",
-        "Motivo del descuento": "987",
-        "Comentarios": "Myr Vlr Pagado " + grandes_dif["Referencia / Factura"].fillna("")
-    })
+    grandes_lineas = grandes_dif.assign(
+        **{
+            "Tipo de Documento": "Descuento Cliente",
+            "Importe de Remittance": grandes_dif["Diferencia"],
+            "Pago Neto": "",
+            "Descuento": "Myr Vlr Pagado",
+            "Motivo del descuento": "987",
+            "Comentarios": "Myr Vlr Pagado " + grandes_dif["Referencia / Factura"].fillna("")
+        }
+    )[
+        [
+            "Tipo de Documento",
+            "Referencia / Factura",
+            "Importe de Remittance",
+            "Pago Neto",
+            "Descuento",
+            "Motivo del descuento",
+            "Comentarios",
+        ]
+    ]
 
     # =====================================================
-    # 8.5 Agrupar menores diferencias en bloques de ±20000
+    # 11.5 Agrupar menores diferencias en bloques de ±20000
     # =====================================================
     registros_menores = []
 
@@ -92,20 +107,19 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
             })
 
     # =====================================================
-    # 8.6 Combinar todas las líneas generadas
+    # 11.6 Combinar todas las líneas generadas
     # =====================================================
-    registros_finales = pd.concat([
-        grandes_lineas,
-        pd.DataFrame(registros_menores)
-    ], ignore_index=True)
+    registros_finales = pd.concat(
+        [grandes_lineas, pd.DataFrame(registros_menores)], ignore_index=True
+    )
 
     # =====================================================
-    # 8.7 Concatenar al template original
+    # 11.7 Concatenar al template original
     # =====================================================
     hrc_template = pd.concat([hrc_template, registros_finales], ignore_index=True)
 
     # =====================================================
-    # 8.8 Parche valores vacíos de factura
+    # 11.8 Parche valores vacíos de factura
     # =====================================================
     hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
         hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),

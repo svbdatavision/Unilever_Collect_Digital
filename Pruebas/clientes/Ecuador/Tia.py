@@ -62,7 +62,7 @@ def procesar():
         "salida": os.path.join(root, "Archivos", "Template", "Ecuador", "Template_HRC_TIA.xlsx")
     }
     # Colocar el Customer ID del cliente
-    customer_id = #FALTA
+    customer_id = 1234 # FALTA
     
     # =====================================================
     # 1. Lectura de Remitente
