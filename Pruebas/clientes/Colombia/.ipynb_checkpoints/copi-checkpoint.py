@@ -76,6 +76,10 @@ def procesar():
     # --- Intercambiar signo de los valores
     remittance["Importe de Remittance"] = -remittance["Importe de Remittance"]
 
+    # Si está vacía, tomamos "Clase" para Referencia y "Texto" para Comentarios
+    mask_vacia = remittance["Referencia / Factura"].isna() | (remittance["Referencia / Factura"].astype(str).str.strip() == "nan")
+    remittance.loc[mask_vacia, "Referencia / Factura"] = remittance.loc[mask_vacia, "Tipo de Documento"]
+    remittance.loc[mask_vacia, "Comentarios"] = remittance.loc[mask_vacia, "Texto"]
 
     # =====================================================
     # 5. Manejo de Reglas y CARDs
@@ -158,9 +162,7 @@ def procesar():
     # 13. Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
     # =====================================================
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
-    
-    hrc_template.loc[hrc_template["Tipo de Documento"] == "Nota de reintegro", ["Descuento", "Comentarios"]] = ""
-    
+        
     # No recuerdo que quisimos hacer aqui Richi.
 #    hrc_template = hrc_template.replace("nan", "Validar soporte")
 

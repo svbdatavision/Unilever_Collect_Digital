@@ -17,13 +17,15 @@ from clientes.utils import *  # Importación de funciones utilitarias del paquet
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
-def _project_root():d
+def _project_root():
     if getattr(sys, "frozen", False):
         macos_dir = os.path.dirname(sys.executable)
         contents_dir = os.path.dirname(macos_dir)
         app_bundle = os.path.dirname(contents_dir)
         return os.path.dirname(app_bundle)
+
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 # =====================================================
 # 2. Función principal del proceso (procesar)

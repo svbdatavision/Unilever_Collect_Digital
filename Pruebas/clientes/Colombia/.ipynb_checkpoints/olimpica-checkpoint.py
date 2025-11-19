@@ -23,7 +23,9 @@ def _project_root():
         contents_dir = os.path.dirname(macos_dir)
         app_bundle = os.path.dirname(contents_dir)
         return os.path.dirname(app_bundle)
+
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 # =====================================================
 # 2. Función principal del proceso (procesar)

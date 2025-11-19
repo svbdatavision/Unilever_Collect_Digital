@@ -32,7 +32,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     # =====================================================
     hrc_template["Diferencia"] = pd.NA
     hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
-        hrc_template["Importe de factura"] - hrc_template["Importe de Remittance"]
+        (hrc_template["Importe de factura"] - hrc_template["Importe de Remittance"]) * -1
     )
 
     # =====================================================
@@ -62,11 +62,15 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
             "Tipo de Documento": "Descuento Cliente",
             "Importe de Remittance": grandes_dif["Diferencia"],
             "Pago Neto": "",
-            "Descuento": "Myr Vlr Pagado",
-            "Motivo del descuento": np.where(
-                grandes_dif["Diferencia"] < 0, "987", "987"  # puedes ajustar si hay lógica distinta por signo
+            "Descuento": grandes_dif["Diferencia"].apply(
+                lambda x: "Menor Vlr Pagado" if x < limite_inferior else "Myr Vlr Pagado"
             ),
-            "Comentarios": "Myr Vlr Pagado " + grandes_dif["Referencia / Factura"].fillna("")
+            "Motivo del descuento": grandes_dif["Diferencia"].apply(
+                lambda x: "CSR" if x < limite_inferior else "388"
+            ),
+            "Comentarios": grandes_dif.apply(
+                lambda x: f"{'Menor Vlr Pagado' if x['Diferencia'] < limite_inferior else 'Myr Vlr Pagado'} {x['Referencia / Factura']}", axis=1
+            )
         }
     )[
         [

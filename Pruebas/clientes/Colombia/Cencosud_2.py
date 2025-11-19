@@ -145,25 +145,11 @@ def procesar():
 
     # Tipos válidos de VOUCHER para Cencosud
     filter_values = [
-        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL'
+        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL','VOUCHER'
     ]
 
     # Filtrar filas por la primera columna (la del tipo de voucher)
     remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
-    
-    # Tranformamos a numerico el dato "VALOR PAG"
-    remittance["VALOR PAG"] = (
-        remittance["VALOR PAG"]
-        .astype(str)
-        .str.replace(".", "", regex=False)   # quitar puntos de miles
-        .str.replace(",", ".", regex=False)  # convertir coma a decimal
-    )
-    
-    remittance["VALOR PAG"] = pd.to_numeric(remittance["VALOR PAG"], errors="coerce")
-
-    # Parche necesario, dejar. Por lectura de pdf se puede movel el valor de la columna "VALOR PAG" a "DOC.SOPORTE".
-    # Esta linea reemplaza los valores de "VALOR PAG" cuando es 0 por el valor de "DOC.SOPORTE"
-    remittance.loc[remittance["VALOR PAG"] == 0, "VALOR PAG"] = remittance["DOC.SOPORTE"]
 
     # Ordenamiento personalizado
     def sort_key(val):
@@ -198,7 +184,7 @@ def procesar():
     # Renombramos columna "Referencia / Factura" "FACTURA PROVEEDOR" por "Factura"
     remittance.loc[remittance["Tipo de Documento"] == "FACTURA PROVEEDOR", "Tipo de Documento"] = "Factura"
 
-#    # Limpieza de importes
+    # Limpieza de importes
     remittance["Importe de Remittance"] = (
         pd.to_numeric(
             remittance["Importe de Remittance"].astype(str)

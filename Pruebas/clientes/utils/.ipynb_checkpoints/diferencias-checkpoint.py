@@ -18,7 +18,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     # =====================================================
     hrc_template["Diferencia"] = pd.NA
     hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
-        hrc_template["Importe de factura"] - hrc_template["Importe de Remittance"]
+        (hrc_template["Importe de factura"] - hrc_template["Importe de Remittance"]) * -1
     )
 
     # =====================================================
@@ -47,9 +47,15 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
             "Tipo de Documento": "Descuento Cliente",
             "Importe de Remittance": grandes_dif["Diferencia"],
             "Pago Neto": "",
-            "Descuento": "Myr Vlr Pagado",
-            "Motivo del descuento": "987",
-            "Comentarios": "Myr Vlr Pagado " + grandes_dif["Referencia / Factura"].fillna("")
+            "Descuento": grandes_dif["Diferencia"].apply(
+                lambda x: "Menor Vlr Pagado" if x < -20000 else "Myr Vlr Pagado"
+            ),
+            "Motivo del descuento": grandes_dif["Diferencia"].apply(
+                lambda x: "CSR" if x < -20000 else "388"
+            ),
+            "Comentarios": grandes_dif.apply(
+                lambda x: f"{'Menor Vlr Pagado' if x['Diferencia'] < -20000 else 'Myr Vlr Pagado'} {x['Referencia / Factura']}", axis=1
+            )
         }
     )[
         [
@@ -84,7 +90,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
                     "Importe de Remittance": acumulado,
                     "Pago Neto": "",
                     "Descuento": "MENORES VALORES",
-                    "Motivo del descuento": "WOB" if acumulado < 0 else "384",
+                    "Motivo del descuento": "CSR" if acumulado < 0 else "388",
                     "Comentarios": "MENORES VALORES"
                 })
                 # Reiniciar bloque con la nueva línea
@@ -102,7 +108,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
                 "Importe de Remittance": acumulado,
                 "Pago Neto": "",
                 "Descuento": "MENORES VALORES",
-                "Motivo del descuento": "WOB" if acumulado < 0 else "384",
+                "Motivo del descuento": "CSR" if acumulado < 0 else "388",
                 "Comentarios": "MENORES VALORES"
             })
 
@@ -122,7 +128,9 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     # 11.8 Parche valores vacíos de factura
     # =====================================================
     hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
-        hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),
+        hrc_template["Importe de factura"].notna()
+        & (hrc_template["Importe de factura"] != "")
+        & (hrc_template["Importe de factura"] != 0),
         hrc_template["Importe de Remittance"]
     )
 

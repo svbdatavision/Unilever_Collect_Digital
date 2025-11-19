@@ -75,45 +75,111 @@ def procesar():
     num_pages = len(reader.pages)
     all_pages = set(range(1, num_pages + 1))
 
-    tables_stream = camelot.read_pdf(rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n')
+    tables_stream = camelot.read_pdf(
+        rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n'
+    )
     stream_pages = set(int(t.page) for t in tables_stream)
     missing_pages = all_pages - stream_pages
 
     tables_lattice = []
     if missing_pages:
         missing_pages_str = ",".join(str(p) for p in missing_pages)
-        tables_lattice = camelot.read_pdf(rutas["pdf_remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n')
+        tables_lattice = camelot.read_pdf(
+            rutas["pdf_remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
+        )
 
+    # Concatenar todas las tablas detectadas
     df_all = pd.concat([t.df for t in list(tables_stream) + list(tables_lattice)], ignore_index=True)
 
-    # Detectar fila de encabezado real
-    header_row_idx = df_all[df_all.apply(lambda r: r.astype(str).str.contains('VOUCHER').any(), axis=1)].index[0]
+    # =====================================================
+    # Detectar fila de ENCABEZADO real (DOCUMENTO o VOUCHER)
+    # =====================================================
+
+    header_idx_candidates = df_all.apply(
+        lambda row: row.astype(str).str.contains("DOCUMENTO", case=False).any()
+                     or row.astype(str).str.contains("VOUCHER", case=False).any(),
+        axis=1
+    )
+
+    if not header_idx_candidates.any():
+        raise ValueError(
+            "No se encontró encabezado válido (ni 'DOCUMENTO' ni 'VOUCHER')\n"
+            f"Primeras filas detectadas:\n{df_all.head()}"
+        )
+
+    header_row_idx = header_idx_candidates.idxmax()
+    
+    # Convertimos esa fila en encabezado real
     df_all.columns = df_all.iloc[header_row_idx]
-    df_all = df_all.drop(index=list(range(header_row_idx + 1))).reset_index(drop=True)
-    df_all = df_all[~df_all.apply(lambda r: all(r.astype(str) == df_all.columns.astype(str)), axis=1)].reset_index(drop=True)
+    df_all = df_all.drop(index=list(range(0, header_row_idx + 1))).reset_index(drop=True)
+    
+    # ---- LIMPIAR COLUMNAS NO VÁLIDAS (ANTES DE NORMALIZAR) ----
+    df_all = df_all.loc[:, ~df_all.columns.isna()]
+
+    # ---- NORMALIZAR NOMBRES DE COLUMNAS ----
+    df_all.columns = (
+        df_all.columns.astype(str)
+        .str.replace(r"[\n\r]+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        .str.upper()          # Todo en mayúsculas para emparejar
+    )
+
+    # ---- RENOMBRAR COLUMNA DOCUMENTO SIN IMPORTAR COMO SALGA ----
+    # Buscar cualquier columna que contenga "DOCUMENTO"
+    col_documento = [c for c in df_all.columns if "DOCUMENTO" in c]
+
+    if len(col_documento) == 0:
+        raise ValueError(f"No se detectó columna DOCUMENTO en: {list(df_all.columns)}")
+
+    # Renombrar la columna encontrada a un nombre estándar
+    df_all = df_all.rename(columns={col_documento[0]: "DOCUMENTO"})
+
+#    # Limpiar columnas no válidas
+#    df_all = df_all.loc[:, ~df_all.columns.isna()]
+#    df_all.columns = df_all.columns.astype(str).str.strip()
 
     # =====================================================
     # 4. Limpieza de Remittance
     # =====================================================
-    # Definimos los tipos de VOUCHER que nos interesan para Cencosud.
-    filter_values = ['DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL','VOUCHER']
-    
-    # Filtramos únicamente las filas que contienen estos códigos
-    remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
 
-    # 4 Ordenar Remittance para asegurar consistencia
+    # Tipos válidos de VOUCHER para Cencosud
+    filter_values = [
+        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL'
+    ]
+
+    # Filtrar filas por la primera columna (la del tipo de voucher)
+    remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
+    
+    # Tranformamos a numerico el dato "VALOR PAG"
+    remittance["VALOR PAG"] = (
+        remittance["VALOR PAG"]
+        .astype(str)
+        .str.replace(".", "", regex=False)   # quitar puntos de miles
+        .str.replace(",", ".", regex=False)  # convertir coma a decimal
+    )
+    
+    remittance["VALOR PAG"] = pd.to_numeric(remittance["VALOR PAG"], errors="coerce")
+
+    # Parche necesario, dejar. Por lectura de pdf se puede movel el valor de la columna "VALOR PAG" a "DOC.SOPORTE".
+    # Esta linea reemplaza los valores de "VALOR PAG" cuando es 0 por el valor de "DOC.SOPORTE"
+    remittance.loc[remittance["VALOR PAG"] == 0, "VALOR PAG"] = remittance["DOC.SOPORTE"]
+
+    # Ordenamiento personalizado
     def sort_key(val):
         if val == "VOUCHER": return "0"
         if val == "FPM":     return "1"
         return "2" + str(val)
-    # Aplicamos la función de ordenamiento a cada fila, generando una nueva columna temporal
+
     remittance["sort_order"] = remittance[remittance.columns[0]].apply(sort_key)
-    
-    # Ordenamos el DataFrame según la columna temporal y limpiamos duplicados
-    remittance = (remittance.sort_values(by="sort_order")
-                  .drop(columns="sort_order")
-                  .drop_duplicates()
-                  .reset_index(drop=True))
+
+    remittance = (
+        remittance.sort_values(by="sort_order")
+        .drop(columns="sort_order")
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
 
     # 2.1 Guardar Remittance en buffer en memoria
     remittance_buffer = io.BytesIO()
@@ -132,7 +198,7 @@ def procesar():
     # Renombramos columna "Referencia / Factura" "FACTURA PROVEEDOR" por "Factura"
     remittance.loc[remittance["Tipo de Documento"] == "FACTURA PROVEEDOR", "Tipo de Documento"] = "Factura"
 
-    # Limpieza de importes
+#    # Limpieza de importes
     remittance["Importe de Remittance"] = (
         pd.to_numeric(
             remittance["Importe de Remittance"].astype(str)
