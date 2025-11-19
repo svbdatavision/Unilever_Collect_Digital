@@ -2,11 +2,18 @@ import fitz  # PyMuPDF
 import pandas as pd
 import re
 import os
+import pandas as pd
+import numpy as np
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Font, Border, Side
+from utils import *
+import config
 from tkinter import messagebox
 
-# --- PATRONES Y MAPEO ---
+customer_id = 10299933
+
+# Ruta del archivo PDF
+archivos_remittance = r"C:\Users\Omar.Tuesta\Unilever\Codigos - Documents\Automatizaciones MT\Template\Main\Facturas pagadas a proveedor.PDF"
+archivo_fbl5n = r"C:\Users\Omar.Tuesta\Unilever\Codigos - Documents\Automatizaciones MT\Template\Main\FBL5N - copia.xlsx"
 TIPO_MAP = {
     "Fact.Elect. Af. Emi": "Factura por convenio",
     "Fac Elect Ex Emitida": "Factura por convenio",
@@ -16,86 +23,112 @@ TIPO_MAP = {
 }
 PREFIJOS_A_ELIMINAR = ("08-", "07-", "00-", "01-")
 
-# --- NUEVO: DETECCIÓN ROBUSTA DE FILAS Y CAMPOS ---
-
-def extraer_tabla_pdf(archivo_pdf):
-    doc = fitz.open(archivo_pdf)
-    tabla_documentos = []
-    regex_fila = re.compile(
-        r"(\d{2}\.\d{2}\.\d{4})\s+([A-Z0-9\-]+)\s+([\w\s\.\-]+?)\s+([\-]?\d{1,3}(?:[\.,]\d{3})*[\.,]\d{2})"
-    )
-    for page in doc:
-        text = page.get_text()
-        for match in regex_fila.findall(text):
-            fecha, referencia, tipo_doc, monto_texto = match
-            for prefijo in PREFIJOS_A_ELIMINAR:
-                if referencia.startswith(prefijo):
-                    referencia = referencia[len(prefijo):]
-                    break
-            descripcion = TIPO_MAP.get(tipo_doc.strip(), tipo_doc.strip())
-            monto_texto = monto_texto.replace('.', '').replace(',', '.').replace(' ', '')
-            monto = float(monto_texto.replace('-', ''))
-            razon_descuento = 657 if descripcion == "Factura por convenio" else ""
-            
-            # ✅ Aplicar monto negativo si la razón de descuento es 657
-            if razon_descuento == 657 or TIPO_MAP.get(tipo_doc.strip()) == "Nota de crédito":
-                monto = -abs(monto)
-            else:
-                monto = -monto if '-' in monto_texto else monto
-
-            tabla_documentos.append({
-                "Tipo de documento": descripcion,
-                "Referencia/ Factura": referencia,
-                "Monto": monto,
-                "Razon de descuento": razon_descuento
-            })
-    return pd.DataFrame(tabla_documentos)
-
-
-def procesar(archivo_remittance, _):
+def procesar(archivos_remittance, archivo_fbl5n):
     try:
-        df_documentos = extraer_tabla_pdf(archivo_remittance)
-        nombre_base = os.path.splitext(os.path.basename(archivo_remittance))[0]
-        excel_path = os.path.join(
-            os.path.dirname(archivo_remittance),
-            f"Remmitance_Tottus.xlsx"
+        rutas = {
+            "remittance": archivos_remittance,
+            "fbl5n": archivo_fbl5n,
+            "salida": os.path.join(os.path.dirname(archivos_remittance), "Tottus.xlsx")
+        }
+        doc = fitz.open(archivos_remittance)
+        tabla_documentos = []
+        regex_fila = re.compile(
+            r"(\d{2}\.\d{2}\.\d{4})\s+([A-Z0-9\-]+)\s+([\w\s\.\-]+?)\s+([\-]?\d{1,3}(?:[\.,]\d{3})*[\.,]\d{2})"
         )
-        contador = 1
-        while os.path.exists(excel_path):
-            excel_path = os.path.join(
-                os.path.dirname(archivo_remittance),
-                f"Remmitance_Tottus_{contador}.xlsx"
-            )
-            contador += 1
-        df_documentos.to_excel(excel_path, sheet_name="Documentos por pagar", index=False)
-        datos_extra = [
-            ("Nombre Cliente", "HIPERMERCADOS TOTTUS S A"),
-            ("Numero de Cliente", "10299933"),
-            ("Referencia de Pago", ""),
-            ("Pago", sum(df_documentos["Monto"])),
-            ("Metodo de Pago", "TRANSFERENCIA"),
-            ("Fecha de pago", ""),
+
+        for page in doc:
+            text = page.get_text()
+            for match in regex_fila.findall(text):
+                fecha, referencia, tipo_doc, monto_texto = match
+                for prefijo in PREFIJOS_A_ELIMINAR:
+                    if referencia.startswith(prefijo):
+                        referencia = referencia[len(prefijo):]
+                        break
+                descripcion = TIPO_MAP.get(tipo_doc.strip(), tipo_doc.strip())
+                monto_texto = monto_texto.replace('.', '').replace(',', '.').replace(' ', '')
+                monto = float(monto_texto.replace('-', ''))
+                tabla_documentos.append({
+                    "Tipo de Documento": descripcion,
+                    "Referencia / Factura": referencia,
+                    "Importe de Remittance": monto
+                })
+
+        # CORRECCIÓN: Crear DataFrame directamente
+        remittance = pd.DataFrame(tabla_documentos)
+
+        
+        remittance["Importe de Remittance"] = remittance.apply(
+            lambda row: -abs(row["Importe de Remittance"]) if row["Tipo de Documento"] in ["Nota de crédito", "Factura por convenio"]
+            else abs(row["Importe de Remittance"]),
+            axis=1
+        )
+
+        # Crear columnas adicionales si no existen
+        for col in ["Descuento", "Motivo del descuento", "Comentarios"]:
+            if col not in remittance.columns:
+                remittance[col] = ""
+                
+        # Condiciones y motivos
+        conds = [
+            remittance["Referencia / Factura"].str.startswith("FF", na=False)
         ]
-        wb = load_workbook(excel_path)
-        ws = wb.active
-        fill_azul = PatternFill(start_color="D0E9F8", end_color="D0E9F8", fill_type="solid")
-        font_negrita = Font(bold=True)
-        borde_negro = Border(
-            left=Side(style="thin", color="000000"),
-            right=Side(style="thin", color="000000"),
-            top=Side(style="thin", color="000000"),
-            bottom=Side(style="thin", color="000000")
+
+        descuentos = ["Descuento cliente"]
+        motivos = ["657"]
+
+        remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
+        remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
+
+        # Crear columna Comentarios si hay motivo de descuento
+        remittance.loc[
+            remittance["Motivo del descuento"].notna() & (remittance["Motivo del descuento"].str.strip() != ""),
+            "Comentarios"
+        ] = remittance["Referencia / Factura"].astype(str)
+        # Procesos adicionales
+        FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+        hrc_template = merge_remittance_cartera(remittance, FBL5N)
+        hrc_template = procesar_diferencias(hrc_template)
+        hrc_template = procesamiento_nro(hrc_template, FBL5N)
+
+        # Ajustar columnas finales
+        hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+        columnas_finales = [
+            "Tipo de Documento",
+            "Referencia / Factura",
+            "Importe de factura",
+            "Descuento",
+            "Motivo del descuento",
+            "Pago Neto",
+            "Comentarios"
+        ]
+        hrc_template = hrc_template[columnas_finales]
+
+        # Datos adicionales
+        numero_orden = ""
+        id_cliente = customer_id
+        nombre_cliente = "HIPERMERCADOS TOTTUS S A"
+
+        # Guardar remittance temporal en Excel
+        ruta_remittance_excel = os.path.join(os.path.dirname(archivos_remittance), "remittance_temp.xlsx")
+        remittance.to_excel(ruta_remittance_excel, index=False)
+
+        # Exportar template final
+        exportar_template(
+            hrc_template=hrc_template,
+            suma_remittance=remittance["Importe de Remittance"].sum(),
+            numero_orden=numero_orden,
+            id_cliente=id_cliente,
+            nombre_cliente=nombre_cliente,
+            ruta_remittance=ruta_remittance_excel,
+            ruta_salida=rutas["salida"]
         )
-        for i, (col_f, col_g) in enumerate(datos_extra, start=1):
-            celda_f = ws[f"F{i}"]
-            celda_g = ws[f"G{i}"]
-            celda_f.value = col_f
-            celda_g.value = col_g
-            celda_f.fill = fill_azul
-            celda_f.font = font_negrita
-            celda_f.border = borde_negro
-            celda_g.border = borde_negro
-        wb.save(excel_path)
-        messagebox.showinfo("Exito", "Se genero el archivo remmitance")
+
+        # (Opcional) Eliminar el archivo temporal
+        if os.path.exists(ruta_remittance_excel):
+            os.remove(ruta_remittance_excel)
+        messagebox.showinfo("Exitoso",f"✅ Archivo exportado exitosamente como {rutas['salida']}")
+        return hrc_template
+
     except Exception as e:
         messagebox.showerror("Error", f"Ocurrió un error: {e}")
+        raise e

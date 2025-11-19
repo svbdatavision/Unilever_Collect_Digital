@@ -3,87 +3,122 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Border, Side
 from tkinter import messagebox
+import numpy as np
+from utils import *
 
-def procesar(archivo_remittance, _):
-    try:
-        remittance_df = pd.read_excel(archivo_remittance)
-        remittance_df.columns = remittance_df.columns.str.strip()
+
+customer_id = 10263165
+
+def procesar(archivos_remittance, archivo_fbl5n):
+    try: 
+    
+        rutas = {
+            "remittance": archivos_remittance,
+            "fbl5n": archivo_fbl5n,
+            "salida": os.path.join(os.path.dirname(archivos_remittance), "SPSA.xlsx")
+        }
+
+        df = pd.read_excel(archivos_remittance, sheet_name='Pagos(detalle)', engine='openpyxl')
+
+        # Seleccionar las columnas deseadas
+        columnas_deseadas = ['Descripción Tipo Documento', 'Nro. Documento Proveedor', 'Importe Documento']
+        remittance = df[columnas_deseadas]
 
         tipo_map = {
-            "Nota de Débito": "ND",
-            "Nota de Crédito": "NC",
+            "Nota de Débito": "Nota de Débito",
+            "Nota de Crédito": "Nota de Crédito",
             "Factura Mercadería": "Factura",
             "Facturas por Cobrar": "Fact. Convenio",
         }
 
-        formato_df = pd.DataFrame()
-        formato_df["Tipo Doc"] = remittance_df["Descripción Tipo Documento"].map(lambda x: tipo_map.get(x, "Otro"))
-        formato_df["Referencia / Factura"] = remittance_df["Nro. Documento Proveedor"]
-        formato_df["Importe de factura"] = remittance_df["Importe Documento"]
+        # Renombrar columnas
+        remittance = remittance.rename(columns={
+            "Descripción Tipo Documento": "Tipo de Documento",
+            "Nro. Documento Proveedor": "Referencia / Factura",
+            "Importe Documento": "Importe de Remittance"
+        })
 
-        def razon_descuento(row):
-            ref = str(row["Nro. Documento Proveedor"])
-            if ref.startswith("F0") or ref.startswith("FN"):
-                return "657"
-            if ref.startswith("F701") or ref.startswith("F121"):
-                return ""
-            return tipo_map.get(row["Tipo"], "Otro")
 
-        formato_df["Razon de Descuento"] = remittance_df.apply(razon_descuento, axis=1)
-        formato_df["Importe de factura"] = formato_df["Importe de factura"].round(2)
-        formato_df = formato_df.dropna(subset=["Referencia / Factura", "Importe de factura"])
+        for col in ["Descuento", "Motivo del descuento", "Comentarios"]:
+            if col not in remittance.columns:
+                remittance[col] = ""
 
-        nombre_base = os.path.splitext(os.path.basename(archivo_remittance))[0]
-        ruta_salida = os.path.join(
-            os.path.dirname(archivo_remittance),
-            f"Remmitance_Intercorp.xlsx"
-        )
-
-        contador = 1
-        while os.path.exists(ruta_salida):
-            ruta_salida = os.path.join(
-                os.path.dirname(archivo_remittance),
-                f"Remmitance_Intercorp_{contador}.xlsx"
-            )
-            contador += 1
-
-        formato_df.to_excel(ruta_salida, index=False)
-
-        wb = load_workbook(ruta_salida)
-        ws = wb.active
-
-        datos_extra = [
-            ("Nombre Cliente", "SUPERM PERUANOS S A"),
-            ("Numero de Cliente", "10263165"),
-            ("Referencia de Pago", ""),
-            ("Pago", sum(formato_df["Importe de factura"])),
-            ("Metodo de Pago", "TRANSFERENCIA"),
-            ("Fecha de pago", ""),
+        # Condiciones y motivos
+        conds = [
+            remittance["Tipo de Documento"].str.startswith("Facturas por Cobrar", na=False),
         ]
 
-        fill_azul = PatternFill(start_color="D0E9F8", end_color="D0E9F8", fill_type="solid")
-        font_negrita = Font(bold=True)
-        borde_negro = Border(
-            left=Side(style="thin", color="000000"),
-            right=Side(style="thin", color="000000"),
-            top=Side(style="thin", color="000000"),
-            bottom=Side(style="thin", color="000000")
+        descuentos = ["Descuento cliente"]
+        motivos = ["657"]
+
+        remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
+        remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
+
+        # Crear columna Comentarios si hay motivo de descuento
+        remittance.loc[
+            remittance["Motivo del descuento"].notna() & (remittance["Motivo del descuento"].str.strip() != ""),
+            "Comentarios"
+        ] = remittance["Referencia / Factura"].astype(str)
+
+        # Determinar tipo de documento según valor y motivo de descuento
+        remittance["Tipo de Documento"] = np.select(
+            [
+                remittance["Motivo del descuento"].notna() & (remittance["Motivo del descuento"].str.strip() != ""),
+                remittance["Importe de Remittance"] < 0,
+                remittance["Importe de Remittance"] >= 0
+            ],
+            [
+                "Descuento cliente",
+                "Nota de crédito",
+                "Factura"
+            ],
+            default="Factura"  # ← Asegúrate de que esto también sea str
         )
 
-        for i, (col_f, col_g) in enumerate(datos_extra, start=1):
-            celda_f = ws[f"F{i}"]
-            celda_g = ws[f"G{i}"]
+        FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+        hrc_template = merge_remittance_cartera(remittance, FBL5N)
+        hrc_template = procesar_diferencias(hrc_template)
+        hrc_template = procesamiento_nro(hrc_template, FBL5N)
 
-            celda_f.value = col_f
-            celda_g.value = col_g
+        # Ajustar columnas finales
+        hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+        columnas_finales = [
+            "Tipo de Documento",
+            "Referencia / Factura",
+            "Importe de factura",
+            "Descuento",
+            "Motivo del descuento",
+            "Pago Neto",
+            "Comentarios"
+        ]
+        hrc_template = hrc_template[columnas_finales]
 
-            celda_f.fill = fill_azul
-            celda_f.font = font_negrita
-            celda_f.border = borde_negro
-            celda_g.border = borde_negro
+        # Datos adicionales
+        numero_orden = ""
+        id_cliente = customer_id
+        nombre_cliente = "SUPERM PERUANOS S A"
 
-        wb.save(ruta_salida)
-        messagebox.showinfo("¡Éxito!", f"✅ Archivo actualizado con datos en columnas F y G\nGuardado como {ruta_salida}")
+        # Guardar remittance temporal en Excel
+        ruta_remittance_excel = os.path.join(os.path.dirname(archivos_remittance), "remittance_temp.xlsx")
+        remittance.to_excel(ruta_remittance_excel, index=False)
+
+        # Exportar template final
+        exportar_template(
+            hrc_template=hrc_template,
+            suma_remittance=remittance["Importe de Remittance"].sum(),
+            numero_orden=numero_orden,
+            id_cliente=id_cliente,
+            nombre_cliente=nombre_cliente,
+            ruta_remittance=ruta_remittance_excel,
+            ruta_salida=rutas["salida"]
+        )
+
+        # (Opcional) Eliminar el archivo temporal
+        if os.path.exists(ruta_remittance_excel):
+            os.remove(ruta_remittance_excel)
+        messagebox.showinfo("Exitoso",f"✅ Archivo exportado exitosamente como {rutas['salida']}")
+        return hrc_template
 
     except Exception as e:
         messagebox.showerror("Error", f"Ocurrió un error: {e}")
+        raise e
