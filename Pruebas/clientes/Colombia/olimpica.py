@@ -8,16 +8,16 @@ import numpy as np
 from openpyxl import load_workbook
 
 # Buscamos las funciones en la carpeta Main
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
-sys.path.append(project_root)
-from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
-#from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
+# sys.path.append(project_root)
+# from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
-def _project_root():
+def _project_root():d
     if getattr(sys, "frozen", False):
         macos_dir = os.path.dirname(sys.executable)
         contents_dir = os.path.dirname(macos_dir)

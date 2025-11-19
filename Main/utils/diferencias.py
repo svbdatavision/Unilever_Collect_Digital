@@ -1,82 +1,142 @@
+# =====================================================
+# 11. Cálculo de diferencias
+# =====================================================
+
 import pandas as pd
 import numpy as np
 import config
 
 def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
+    """
+    Procesa las diferencias entre Importe de factura e Importe de Remittance.
+    - Para diferencias mayores al umbral (según país), crea líneas individuales
+      manteniendo la misma 'Referencia / Factura'.
+    - Para diferencias menores, agrupa todo en una línea 'MENORES VALORES'.
+    """
 
+    # =====================================================
+    # 11.1. Definir límites por país
+    # =====================================================
     pais_actual = config.pais_actual
     if pais_actual is None:
         raise ValueError("La variable 'pais_actual' no está definida en config.")
-
     elif pais_actual == 'Colombia':
-        limite_inferior = -20000
-        limite_superior = 20000
+        limite_inferior, limite_superior = -20000, 20000
     elif pais_actual == 'Ecuador':
-        limite_inferior = -1
-        limite_superior = 1
+        limite_inferior, limite_superior = -1, 1
     else:
-        raise ValueError(fr"País no soportado. Use 'Colombia' o 'Ecuador'. El pais actual es {pais_actual}")
+        raise ValueError(fr"País no soportado. Use 'Colombia' o 'Ecuador'. El país actual es {pais_actual}")
 
-    # Crear columna de diferencia solo para Facturas
+    # =====================================================
+    # 11.2. Calcular diferencias solo para Facturas
+    # =====================================================
     hrc_template["Diferencia"] = pd.NA
     hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Diferencia"] = (
         hrc_template["Importe de factura"] - hrc_template["Importe de Remittance"]
     )
 
-    # Filtrar registros con diferencias distintas de cero
+    # =====================================================
+    # 11.3. Filtrar registros con diferencias válidas
+    # =====================================================
     diferencias = hrc_template[
         hrc_template["Diferencia"].notna() & (hrc_template["Diferencia"] != 0)
     ].copy()
 
-    if len(diferencias) > 20:
-        suma_total = diferencias["Diferencia"].sum()
-        registros_diferencias = pd.DataFrame({
-            "Tipo de Documento": ["Descuentos Clientes"],
-            "Referencia / Factura": ["MENORES VALORES"],
-            "Importe de Remittance": [suma_total],
-            "Pago Neto": [""],
-            "Descuento": ["MENORES VALORES"],
-            "Motivo del descuento": ["WOB" if suma_total < 0 else "384"],
-            "Comentarios": ["MENORES VALORES"]
-        })
-    else:
-        registros_diferencias = pd.DataFrame({
-            "Tipo de Documento": "Descuentos Clientes",
-            "Referencia / Factura": diferencias["Referencia / Factura"],
-            "Importe de Remittance": diferencias["Diferencia"],
+    if diferencias.empty:
+        return hrc_template  # nada que procesar
+
+    # =====================================================
+    # 11.4. Separar grandes diferencias (>|límite|)
+    # =====================================================
+    grandes_dif = diferencias[
+        (diferencias["Diferencia"] > limite_superior) | (diferencias["Diferencia"] < limite_inferior)
+    ].copy()
+
+    menores_dif = diferencias.drop(grandes_dif.index).copy()
+
+    # =====================================================
+    # 11.5. Crear líneas individuales para grandes diferencias
+    # =====================================================
+    grandes_lineas = grandes_dif.assign(
+        **{
+            "Tipo de Documento": "Descuento Cliente",
+            "Importe de Remittance": grandes_dif["Diferencia"],
             "Pago Neto": "",
-            "Descuento": "MENORES VALORES",
-            "Motivo del descuento": np.select(
-                condlist=[
-                    (diferencias["Diferencia"] <= limite_inferior) | (diferencias["Diferencia"] >= limite_superior),
-                    (diferencias["Diferencia"].between(limite_inferior, 0, inclusive="neither")),
-                    (diferencias["Diferencia"].between(0, limite_superior, inclusive="left"))
-                ],
-                choicelist=["987", "WOB", "384"],
-                default="Error (Revisar)"
-            )
-        })
+            "Descuento": "Myr Vlr Pagado",
+            "Motivo del descuento": np.where(
+                grandes_dif["Diferencia"] < 0, "987", "987"  # puedes ajustar si hay lógica distinta por signo
+            ),
+            "Comentarios": "Myr Vlr Pagado " + grandes_dif["Referencia / Factura"].fillna("")
+        }
+    )[
+        [
+            "Tipo de Documento",
+            "Referencia / Factura",
+            "Importe de Remittance",
+            "Pago Neto",
+            "Descuento",
+            "Motivo del descuento",
+            "Comentarios",
+        ]
+    ]
 
-    registros_diferencias["Comentarios"] = np.where(
-        registros_diferencias["Descuento"] == "MENORES VALORES",
-        "MENORES VALORES",
-        registros_diferencias.get("Comentarios", "")
+    # =====================================================
+    # 11.6. Agrupar menores diferencias si hay muchas
+    # =====================================================
+    registros_menores = pd.DataFrame()
+    if not menores_dif.empty:
+        if len(menores_dif) > 20:
+            # Agrupar en una sola línea “MENORES VALORES”
+            suma_total = menores_dif["Diferencia"].sum()
+            registros_menores = pd.DataFrame([{
+                "Tipo de Documento": "Descuento Cliente",
+                "Referencia / Factura": "MENORES VALORES",
+                "Importe de Remittance": suma_total,
+                "Pago Neto": "",
+                "Descuento": "MENORES VALORES",
+                "Motivo del descuento": "WOB" if suma_total < 0 else "384",
+                "Comentarios": "MENORES VALORES"
+            }])
+        else:
+            # Crear líneas individuales para menores diferencias
+            registros_menores = menores_dif.assign(
+                **{
+                    "Tipo de Documento": "Descuento Cliente",
+                    "Importe de Remittance": menores_dif["Diferencia"],
+                    "Pago Neto": "",
+                    "Descuento": "MENORES VALORES",
+                    "Motivo del descuento": np.where(
+                        menores_dif["Diferencia"] < 0, "WOB", "384"
+                    ),
+                    "Comentarios": "MENORES VALORES"
+                }
+            )[
+                [
+                    "Tipo de Documento",
+                    "Referencia / Factura",
+                    "Importe de Remittance",
+                    "Pago Neto",
+                    "Descuento",
+                    "Motivo del descuento",
+                    "Comentarios",
+                ]
+            ]
+
+    # =====================================================
+    # 11.7. Combinar grandes y menores diferencias
+    # =====================================================
+    registros_finales = pd.concat(
+        [grandes_lineas, registros_menores], ignore_index=True
     )
 
-    cond_1 = (registros_diferencias["Motivo del descuento"] == "987") & \
-             (registros_diferencias["Importe de Remittance"] < limite_inferior)
-    cond_2 = (registros_diferencias["Motivo del descuento"] == "987") & \
-             (registros_diferencias["Importe de Remittance"] > limite_superior)
+    # =====================================================
+    # 11.8. Unir con el template original
+    # =====================================================
+    hrc_template = pd.concat([hrc_template, registros_finales], ignore_index=True)
 
-    registros_diferencias.loc[cond_1, "Comentarios"] = (
-        "Myr Vlr Pagado " + registros_diferencias.loc[cond_1, "Referencia / Factura"].fillna("")
-    )
-    registros_diferencias.loc[cond_2, "Comentarios"] = (
-        "Saldo FC " + registros_diferencias.loc[cond_2, "Referencia / Factura"].fillna("")
-    )
-
-    hrc_template = pd.concat([hrc_template, registros_diferencias], ignore_index=True)
-
+    # =====================================================
+    # 11.9. Completar valores vacíos de 'Importe de factura'
+    # =====================================================
     hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
         hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),
         hrc_template["Importe de Remittance"]
