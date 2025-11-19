@@ -53,6 +53,8 @@ def procesar(archivos_remittance, archivo_fbl5n):
             "Monto": "Importe de Remittance"
         })
 
+
+
         # Convertir 'Importe de Remittance' a numérico (float)
         remittance["Importe de Remittance"] = (
             remittance["Importe de Remittance"]
@@ -61,6 +63,11 @@ def procesar(archivos_remittance, archivo_fbl5n):
             .astype(float)                            # Convierte a float
         )
 
+        # Si el Tipo de Documento contiene "FACTURA X COBRAR" o "NOTA DE CREDITO", hacer el importe negativo
+        remittance.loc[
+            remittance["Tipo de Documento"].str.contains("FACTURA X COBRAR|NOTA DE CREDITO", case=False, na=False),
+            "Importe de Remittance"
+        ] *= -1
 
         # Ajustar formato de 'Referencia / Factura' para que tenga 8 dígitos después del guion
         remittance["Referencia / Factura"] = remittance["Referencia / Factura"].apply(
@@ -86,7 +93,7 @@ def procesar(archivos_remittance, archivo_fbl5n):
         remittance.loc[
             remittance["Motivo del descuento"].notna() & (remittance["Motivo del descuento"].str.strip() != ""),
             "Comentarios"
-        ] = remittance["Tipo de Documento"].str.replace(" ", "") + " " + remittance["Referencia / Factura"].astype(str)
+        ] = remittance["Referencia / Factura"].astype(str)
 
                 # Procesos adicionales
         FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)

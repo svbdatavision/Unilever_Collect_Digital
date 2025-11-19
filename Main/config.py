@@ -1,1 +1,1 @@
-pais_actual = "Ecuador"
+pais_actual = None
