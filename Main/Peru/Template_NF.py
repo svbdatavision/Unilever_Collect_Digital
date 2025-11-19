@@ -2,14 +2,26 @@ import pdfplumber
 import pandas as pd
 import re
 import os
+import numpy as np
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Border, Side
 from tkinter import messagebox
+from utils import *
+import config 
 
-def procesar(archivo_remittance, _):
-    try:
+
+customer_id = 10449763
+
+def procesar(archivos_remittance, archivo_fbl5n):
+    try:    
+        tablas_filtradas = []
+        rutas = {
+            "remittance": archivos_remittance,
+            "fbl5n": archivo_fbl5n,
+            "salida": os.path.join(os.path.dirname(archivos_remittance), "Nortfarma.xlsx")
+        }
         rows = []
-        with pdfplumber.open(archivo_remittance) as pdf:
+        with pdfplumber.open(archivos_remittance) as pdf:
             for page in pdf.pages:
                 tables = page.extract_tables()
                 for table in tables:
@@ -33,98 +45,95 @@ def procesar(archivo_remittance, _):
         # Eliminar columna 'Fec Emision'
         df = df.drop(columns=["Fec Emision"])
 
+
         # Renombrar columnas
-        df = df.rename(columns={
+        remittance = df.rename(columns={
+            "Tipo Doc": "Tipo de Documento",
             "Num Documento": "Referencia / Factura",
-            "Monto": "Importe"
+            "Monto": "Importe de Remittance"
         })
 
-        # Agregar columna 'Razon de Descuento'
-        df["Razon de Descuento"] = ""
-        df.loc[df["Tipo Doc"].str.upper() == "FACTURA X COBRAR", "Razon de Descuento"] = "657"
+        # Convertir 'Importe de Remittance' a numérico (float)
+        remittance["Importe de Remittance"] = (
+            remittance["Importe de Remittance"]
+            .replace({',': '', ' ': ''}, regex=True)  # Elimina comas y espacios
+            .replace('', np.nan)                      # Convierte cadenas vacías en NaN
+            .astype(float)                            # Convierte a float
+        )
 
-        # Formatear 'Referencia / Factura'
-        def pad_correlativo(ref, tipo):
-            if not isinstance(ref, str):
-                return ref
-            if tipo.upper() not in ["FACTURA", "NOTA DE CREDITO"]:
-                return ref
-            m = re.match(r"^([A-Z0-9]+)-(\d+)$", ref)
-            if m:
-                prefijo, correlativo = m.groups()
-                correlativo_padded = correlativo.zfill(8)
-                return f"{prefijo}-{correlativo_padded}"
-            return ref
 
-        df["Referencia / Factura"] = [
-            pad_correlativo(ref, tipo)
-            for ref, tipo in zip(df["Referencia / Factura"], df["Tipo Doc"])
+        # Ajustar formato de 'Referencia / Factura' para que tenga 8 dígitos después del guion
+        remittance["Referencia / Factura"] = remittance["Referencia / Factura"].apply(
+            lambda x: f"{x.split('-')[0]}-{x.split('-')[1].zfill(8)}" if isinstance(x, str) and '-' in x else x
+        )
+
+        # Crear columnas adicionales si no existen
+        for col in ["Descuento", "Motivo del descuento", "Comentarios"]:
+            if col not in remittance.columns:
+                remittance[col] = ""
+
+        # Condiciones y motivos
+        conds = [
+            remittance["Tipo de Documento"].str.startswith("FACTURA X COBRAR", na=True)
         ]
+        descuentos = ["Descuento cliente"]
+        motivos = ["987"]
 
-        # Convertir 'Importe' a número y aplicar signo
-        df["Importe"] = df["Importe"].str.replace(",", "")
-        df["Importe"] = pd.to_numeric(df["Importe"], errors="coerce")
+        remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
+        remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
 
-        df.loc[df["Tipo Doc"].str.upper() == "FACTURA", "Importe"] *= 1
-        df.loc[df["Tipo Doc"].str.upper().isin(["NOTA DE CREDITO", "FACTURA X COBRAR"]), "Importe"] *= -1
+        # Crear columna Comentarios si hay motivo de descuento
+        remittance.loc[
+            remittance["Motivo del descuento"].notna() & (remittance["Motivo del descuento"].str.strip() != ""),
+            "Comentarios"
+        ] = remittance["Tipo de Documento"].str.replace(" ", "") + " " + remittance["Referencia / Factura"].astype(str)
 
-        # Reordenar columnas
-        df_final = df[["Tipo Doc", "Referencia / Factura", "Importe", "Razon de Descuento"]]
+                # Procesos adicionales
+        FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+        hrc_template = merge_remittance_cartera(remittance, FBL5N)
+        hrc_template = procesar_diferencias(hrc_template)
+        hrc_template = procesamiento_nro(hrc_template, FBL5N)
+
+        # Ajustar columnas finales
+        hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+        columnas_finales = [
+            "Tipo de Documento",
+            "Referencia / Factura",
+            "Importe de factura",
+            "Descuento",
+            "Motivo del descuento",
+            "Pago Neto",
+            "Comentarios"
+        ]
+        hrc_template = hrc_template[columnas_finales]
 
         # Datos adicionales
-        datos_extra = [
-            ("Nombre Cliente", "NORTFARMA S A C"),
-            ("Numero de Cliente", "10449763"),
-            ("Referencia de Pago", ""),
-            ("Pago", sum(df_final["Importe"])),
-            ("Metodo de Pago", "TRANSFERENCIA"),
-            ("Fecha de pago", ""),
-        ]
+        numero_orden = ""
+        id_cliente = customer_id
+        nombre_cliente = "NORTFARMA S A C"
 
-        # Guardar en la misma carpeta del archivo de entrada
-        nombre_base = os.path.splitext(os.path.basename(archivo_remittance))[0]
-        output_path = os.path.join(
-            os.path.dirname(archivo_remittance),
-            f"Remmitance_Nortfarma.xlsx"
+        # Guardar remittance temporal en Excel
+        ruta_remittance_excel = os.path.join(os.path.dirname(archivos_remittance), "remittance_temp.xlsx")
+        remittance.to_excel(ruta_remittance_excel, index=False)
+
+        # Exportar template final
+        exportar_template(
+            hrc_template=hrc_template,
+            suma_remittance=remittance["Importe de Remittance"].sum(),
+            numero_orden=numero_orden,
+            id_cliente=id_cliente,
+            nombre_cliente=nombre_cliente,
+            ruta_remittance=ruta_remittance_excel,
+            ruta_salida=rutas["salida"]
         )
 
-        contador = 1
-        while os.path.exists(output_path):
-            output_path = os.path.join(
-                os.path.dirname(archivo_remittance),
-                f"Remmitance_Nortfarma_{contador}.xlsx"
-            )
-            contador += 1
-
-
-        df_final.to_excel(output_path, index=False)
-
-        wb = load_workbook(output_path)
-        ws = wb.active
-
-        fill_azul = PatternFill(start_color="D0E9F8", end_color="D0E9F8", fill_type="solid")
-        font_negrita = Font(bold=True)
-        borde_negro = Border(
-            left=Side(style="thin", color="000000"),
-            right=Side(style="thin", color="000000"),
-            top=Side(style="thin", color="000000"),
-            bottom=Side(style="thin", color="000000")
-        )
-
-        for i, (col_f, col_g) in enumerate(datos_extra, start=1):
-            celda_f = ws[f"F{i}"]
-            celda_g = ws[f"G{i}"]
-
-            celda_f.value = col_f
-            celda_g.value = col_g
-
-            celda_f.fill = fill_azul
-            celda_f.font = font_negrita
-            celda_f.border = borde_negro
-            celda_g.border = borde_negro
-
-        wb.save(output_path)
-        messagebox.showinfo("¡Éxito!", f"✅ Archivo exportado como {output_path}")
+        # (Opcional) Eliminar el archivo temporal
+        if os.path.exists(ruta_remittance_excel):
+            os.remove(ruta_remittance_excel)
+        messagebox.showinfo("Exitoso",f"✅ Archivo exportado exitosamente como {rutas['salida']}")
+        return hrc_template
 
     except Exception as e:
         messagebox.showerror("Error", f"Ocurrió un error: {e}")
+        raise e
+
