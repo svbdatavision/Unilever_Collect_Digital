@@ -1,45 +1,18 @@
-# =====================================================
-# 0. Importación de librerías y módulos utilitarios
-# =====================================================
+import os
+import sys
+import io
+import warnings
+import pandas as pd
+import numpy as np
+import camelot
+import pdfplumber
+import re
 
-import os       # Manejo de rutas y directorios del sistema operativo
-import sys      # Detección de ejecución empaquetada y manipulación de rutas del intérprete
-import re       # Expresiones regulares (búsqueda y limpieza de texto)
-import io        # Manejo de flujos de datos en memoria (buffers, streams)
-import warnings # Control de advertencias del sistema y librerías externas
+from clientes.utils import *
 
-import numpy as np  # Operaciones numéricas y lógicas (np.where, np.select, etc.)
-import pandas as pd  # Manipulación y análisis de datos tabulares
-import camelot   # Extracción de tablas desde archivos PDF
-from PyPDF2 import PdfReader  # Lectura y procesamiento de archivos PDF
-from openpyxl import load_workbook  # Lectura de archivos Excel (.xlsx)
+warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
 
-# Buscamos las funciones en la carpeta Main
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
-# sys.path.append(project_root)
-# from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
-from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
-
-# Configuración de advertencias
-warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Suprime advertencias generadas por Camelot (usualmente por manejo de PDFs)
-
-
-# =====================================================
-# 1. Localización dinámica de la carpeta raíz del proyecto
-# =====================================================
 def _project_root():
-    """
-    Obtiene la ruta base del proyecto sin importar el entorno de ejecución.
-
-    - Si el código se ejecuta empaquetado (por ejemplo, como .app o .exe),
-      sube desde la ruta del ejecutable hasta la carpeta que contiene el proyecto.
-    - Si se ejecuta como script Python normal, sube dos niveles desde
-      el archivo actual (../..), asumiendo la estructura estándar del proyecto.
-
-    Devuelve:
-        str: Ruta absoluta a la carpeta raíz del proyecto.
-    """
     if getattr(sys, "frozen", False):
         macos_dir = os.path.dirname(sys.executable)
         contents_dir = os.path.dirname(macos_dir)
@@ -47,32 +20,23 @@ def _project_root():
         return os.path.dirname(app_bundle)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# =====================================================
-# 2. Función principal del proceso (procesar)
-# =====================================================
 def procesar():
     root = _project_root()
-
-    # --- Rutas de entrada/salida ---
+    
+    # --- Rutas ---
     rutas = {
         "pdf_remittance": os.path.join(root, "Archivos", "Remittance", "Ecuador", "Remittance_TIA.pdf"),
-#        "pdf_remittance": os.path.join(root, "Archivos", "Remittance", "Ecuador", "Remittance_TIA 2.pdf"),        
-#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
-#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_TIA.xlsx"),
+        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_TIA.xlsx"),
         "salida": os.path.join(root, "Archivos", "Template", "Ecuador", "Template_HRC_TIA.xlsx")
     }
-    # Colocar el Customer ID del cliente
-    customer_id = 1234 # FALTA
     
-    # =====================================================
-    # 1. Lectura de Remitente
-    # =====================================================
-    # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
+    customer_id = 1234  # FALTA
     
+    # --- Lectura PDF ---
     def extraer_facturas(archivo_pdf):
         filas = []
 
-        with pdfplumber.open(rutas["pdf_remittance"]) as pdf:
+        with pdfplumber.open(archivo_pdf) as pdf:
             for pagina in pdf.pages:
                 words = pagina.extract_words(x_tolerance=2, y_tolerance=3)
                 lineas_dict = {}
@@ -97,36 +61,24 @@ def procesar():
             parte_antes = f[:f.rfind(bruto)].strip()
             tokens = parte_antes.split()
 
-            # Fecha y código plaza
             fecha = tokens[0]
             plaza_codigo = tokens[1]
 
-            # Buscar posición del F, C o D
-            tipo_idx = None
-            for i, tok in enumerate(tokens):
-                if tok in ["F", "C", "D"]:
-                    tipo_idx = i
-                    break
-
+            tipo_idx = next((i for i, tok in enumerate(tokens) if tok in ["F","C","D"]), None)
             if tipo_idx is None:
-                print("⚠️ No se encontró tipo en:", f)
                 continue
 
-            # Plaza completa
             plaza_pago = " ".join(tokens[2:tipo_idx])
             tipo_letra = tokens[tipo_idx]
             documento = tokens[tipo_idx + 1]
             descripcion = " ".join(tokens[tipo_idx + 2:])
-
-            # 🔧 Documento = Tipo + número
             documento_final = f"{tipo_letra} {documento}"
-            tipo_texto = descripcion.strip()
 
             registros.append([
                 fecha,
                 f"{plaza_codigo} {plaza_pago}".strip(),
-                tipo_texto,
-                documento_final,
+                tipo_letra,            # Tipo
+                documento_final,       # Documento
                 bruto,
                 ret,
                 neto
@@ -134,27 +86,95 @@ def procesar():
 
         df = pd.DataFrame(
             registros,
-            columns=[
-                "Fecha",
-                "Plaza Pago",
-                "Documento",
-                "Tipo",
-                "Bruto",
-                "Retención",
-                "Neto a Pagar",
-            ],
+            columns=["Fecha", "Plaza Pago", "Tipo", "Documento", "Bruto", "Retención", "Neto a Pagar"]
         )
 
         # Parche
         df[["Documento", "Tipo"]] = df[["Tipo", "Documento"]].copy()
-
         for c in ["Bruto", "Retención", "Neto a Pagar"]:
             df[c] = pd.to_numeric(df[c], errors="coerce")
-
         return df
 
+    remittance = extraer_facturas(rutas["pdf_remittance"])
 
-    # --- Ejecutar ---
-    df = extraer_facturas(rutas["pdf_remittance"])
-    
-    return df.head(100)
+    # --- LIMPIEZA Y TRANSFORMACIÓN ---
+    remittance = remittance.rename(columns={
+        "Documento": "Referencia / Factura",
+        "Tipo": "Relación Cliente",
+        "Neto a Pagar": "Importe de Remittance"
+    })
+
+    # Conversión a numérico
+    remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
+
+    # Tipo de documento
+    conds = [
+        remittance["Relación Cliente"].str.startswith("F", na=False) & (remittance["Importe de Remittance"] > 0),
+        remittance["Relación Cliente"].str.startswith("D", na=False) & (remittance["Importe de Remittance"] > 0)
+    ]
+    choices = ["Factura", "Descuentos Cliente"]
+    remittance["Tipo de Documento"] = np.select(conds, choices, default="")
+
+    # Ajuste de montos negativos para descuentos
+    remittance.loc[remittance["Tipo de Documento"] == "Descuentos Cliente", "Importe de Remittance"] *= -1
+
+    # Columnas para CARDs
+    for col in ["Descuento", "Motivo del descuento", "Comentarios"]:
+        if col not in remittance.columns:
+            remittance[col] = ""
+
+    remittance.loc[remittance["Tipo de Documento"] == "Descuentos Cliente", "Comentarios"] = (
+        remittance["Relación Cliente"].astype(str) + " " + remittance["Referencia / Factura"].astype(str)
+    )
+    remittance["Motivo del descuento"] = np.where(
+        remittance["Tipo de Documento"] == "Descuentos Cliente",
+        "987",
+        remittance["Motivo del descuento"]
+    )
+
+    # --- Lectura de Cartera desde FBL5N ---
+    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+
+    # --- Merge Remittance + FBL5N ---
+    hrc_template = merge_remittance_cartera(remittance, FBL5N)
+
+    # --- Procesar diferencias y NRO ---
+    hrc_template = procesar_diferencias(hrc_template)
+    hrc_template = procesamiento_nro(hrc_template, FBL5N)
+
+    # Pago Neto
+    hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+
+    # Columnas finales
+    columnas_finales = [
+        "Tipo de Documento",
+        "Referencia / Factura",
+        "Importe de factura",
+        "Descuento",
+        "Motivo del descuento",
+        "Pago Neto",
+        "Comentarios"
+    ]
+    hrc_template = hrc_template[columnas_finales]
+
+    # --- Exportar template ---
+    remittance_buffer = io.BytesIO()
+    with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
+        remittance.to_excel(writer, index=False)
+    remittance_buffer.seek(0)
+
+    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
+    id_cliente = fbl5n_meta["Customer"].iloc[0]
+    nombre_cliente = fbl5n_meta["Name 1"].iloc[0]
+
+    exportar_template(
+        hrc_template=hrc_template,
+        suma_remittance=remittance["Importe de Remittance"].sum(),
+        numero_orden="numero_orden",
+        id_cliente=id_cliente,
+        nombre_cliente=nombre_cliente,
+        ruta_remittance=remittance_buffer,
+        ruta_salida=rutas["salida"]
+    )
+
+    return hrc_template

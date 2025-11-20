@@ -62,11 +62,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     num_pages = len(reader.pages)
     all_pages = set(range(1, num_pages + 1))
 
-    
-    reader = PdfReader(rutas["pdf_remittance"])
-    num_pages = len(reader.pages)
-    all_pages = set(range(1, num_pages + 1))
-
     tables_stream = camelot.read_pdf(
         rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n'
     )
