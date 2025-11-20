@@ -63,7 +63,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     all_pages = set(range(1, num_pages + 1))
 
     tables_stream = camelot.read_pdf(
-        rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n'
+        rutas["remittance"], pages='all', flavor='stream', strip_text='\n'
     )
     stream_pages = set(int(t.page) for t in tables_stream)
     missing_pages = all_pages - stream_pages
@@ -72,7 +72,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     if missing_pages:
         missing_pages_str = ",".join(str(p) for p in missing_pages)
         tables_lattice = camelot.read_pdf(
-            rutas["pdf_remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
+            rutas["remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
         )
 
     df_all = pd.concat([t.df for t in list(tables_stream) + list(tables_lattice)], ignore_index=True)
