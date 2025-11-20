@@ -15,21 +15,38 @@ def procesar_descuentos_y_comentarios(remittance):
     Retorna:
         pd.DataFrame: remittance actualizado con las columnas 'Descuento' y 'Comentarios' procesadas.
     """
-    # Asegurar tipo string y limpiar nulos
+
+    # =====================================================
+    # 0. Asegurar existencia de columnas requeridas
+    # =====================================================
+    for col in ["Descuento", "Comentarios"]:
+        if col not in remittance.columns:
+            remittance[col] = ""
+
+    # =====================================================
+    # 1. Asegurar tipo string y limpiar nulos
+    # =====================================================
     remittance["Descuento"] = remittance["Descuento"].fillna("").astype(str)
 
-    # Completar 'DESCUENTO' solo si está vacío y no es factura
+    # =====================================================
+    # 2. Completar 'DESCUENTO' solo si está vacío y no es factura
+    # =====================================================
     remittance.loc[
         (remittance["Descuento"].str.strip() == "") &
         (remittance["Tipo de Documento"] != "Factura"),
         "Descuento"
     ] = "DESCUENTO"
 
-    # Asignar 'Comentarios'
-    remittance["Comentarios"] = np.where(
-        remittance["Tipo de Documento"] == "Factura",
+    # =====================================================
+    # 3. Asignar 'Comentarios' solo si están vacíos
+    # =====================================================
+    mask_coment_vacios = remittance["Comentarios"].fillna("").str.strip() == ""
+
+    remittance.loc[mask_coment_vacios, "Comentarios"] = np.where(
+        remittance.loc[mask_coment_vacios, "Tipo de Documento"] == "Factura",
         "",
-        (remittance["Descuento"].fillna("") + " " + remittance["Referencia / Factura"].fillna("")).str.strip()
+        (remittance.loc[mask_coment_vacios, "Descuento"].fillna("") + " " +
+         remittance.loc[mask_coment_vacios, "Referencia / Factura"].fillna("")).str.strip()
     )
 
     return remittance

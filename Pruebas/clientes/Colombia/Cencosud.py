@@ -59,7 +59,7 @@ def procesar():
 
     # --- Rutas de entrada/salida ---
     rutas = {
-        "pdf_remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),  # Cencosud
+        "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),  # Cencosud
 #        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
         "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_Cenco.xlsx"),
         "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_Cenco.xlsx")
@@ -71,12 +71,12 @@ def procesar():
     # 1. Lectura de Remitente
     # =====================================================
     # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
-    reader = PdfReader(rutas["pdf_remittance"])
+    reader = PdfReader(rutas["remittance"])
     num_pages = len(reader.pages)
     all_pages = set(range(1, num_pages + 1))
 
     tables_stream = camelot.read_pdf(
-        rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n'
+        rutas["remittance"], pages='all', flavor='stream', strip_text='\n'
     )
     stream_pages = set(int(t.page) for t in tables_stream)
     missing_pages = all_pages - stream_pages
@@ -85,7 +85,7 @@ def procesar():
     if missing_pages:
         missing_pages_str = ",".join(str(p) for p in missing_pages)
         tables_lattice = camelot.read_pdf(
-            rutas["pdf_remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
+            rutas["remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
         )
 
     # Concatenar todas las tablas detectadas
@@ -134,10 +134,6 @@ def procesar():
 
     # Renombrar la columna encontrada a un nombre estándar
     df_all = df_all.rename(columns={col_documento[0]: "DOCUMENTO"})
-
-#    # Limpiar columnas no válidas
-#    df_all = df_all.loc[:, ~df_all.columns.isna()]
-#    df_all.columns = df_all.columns.astype(str).str.strip()
 
     # =====================================================
     # 4. Limpieza de Remittance

@@ -131,8 +131,8 @@ def procesar(archivo_remittance,archivo_fbl5n):
     remittance = procesar_descuentos_y_comentarios(remittance)
     
     # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
-    condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Referencia / Factura"].astype(str).str.strip() == "")
-    remittance.loc[condicion, "Comentario"] = remittance["Texto"]
+#    condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Referencia / Factura"].astype(str).str.strip() == "")
+#    remittance.loc[condicion, "Comentario"] = remittance["Texto"]
 
     # =====================================================
     # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)

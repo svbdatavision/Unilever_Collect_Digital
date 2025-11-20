@@ -92,6 +92,8 @@ def procesar(archivo_remittance,archivo_fbl5n):
     header_row_idx = header_idx_candidates.idxmax()
     df_all.columns = df_all.iloc[header_row_idx]
     df_all = df_all.drop(index=list(range(0, header_row_idx + 1))).reset_index(drop=True)
+    
+    # ---- LIMPIAR COLUMNAS NO VÁLIDAS (ANTES DE NORMALIZAR) ----
     df_all = df_all.loc[:, ~df_all.columns.isna()]
 
     df_all.columns = (
