@@ -51,7 +51,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "remittance": archivo_remittance,
         "fbl5n": archivo_fbl5n,
         # Si necesitas una ruta de salida, puedes definirla aquí:
-        "salida": os.path.join(os.path.dirname(archivo_remittance), "Cenocsud.xlsx")
+        "salida": os.path.join(os.path.dirname(archivo_remittance), "Cencosud.xlsx")
     }
     customer_id = 10267301
 

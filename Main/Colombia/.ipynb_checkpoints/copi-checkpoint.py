@@ -13,19 +13,40 @@ import os
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
+def _project_root():
+    """
+    Devuelve la carpeta raíz del proyecto:
+    - Si corre dentro de un .app -> la carpeta que contiene el .app
+    - Si corre como script -> la carpeta del archivo actual (../)
+    """
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
 def procesar(archivo_remittance,archivo_fbl5n):
 
+
     rutas = {
-    "remittance": archivo_remittance,
-    "fbl5n": archivo_fbl5n,
+        "remittance": archivo_remittance,
+        "fbl5n": archivo_fbl5n,
         # Si necesitas una ruta de salida, puedes definirla aquí:
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Copidrogas.xlsx")
     }
+    #root = _project_root()
     
+    # --- Rutas ---
+    #rutas = {
+    #    "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_copi.xlsx"),
+#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
+    #    "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_copi.xlsx"),
+    #    "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_copi.xlsx")
+    #}
     # Colocar el Customer ID del cliente
     customer_id = 10267298
 
@@ -55,6 +76,11 @@ def procesar(archivo_remittance,archivo_fbl5n):
     remittance = remittance.dropna(subset=["Tipo de Documento"])
     # --- Intercambiar signo de los valores
     remittance["Importe de Remittance"] = -remittance["Importe de Remittance"]
+    
+    # Si está vacía, tomamos "Clase" para Referencia y "Texto" para Comentarios
+    mask_vacia = remittance["Referencia / Factura"].isna() | (remittance["Referencia / Factura"].astype(str).str.strip() == "nan")
+    remittance.loc[mask_vacia, "Referencia / Factura"] = remittance.loc[mask_vacia, "Tipo de Documento"]
+    remittance.loc[mask_vacia, "Comentarios"] = remittance.loc[mask_vacia, "Texto"]
 
 
     # =====================================================
@@ -69,10 +95,12 @@ def procesar(archivo_remittance,archivo_fbl5n):
         remittance["Tipo de Documento"].str.startswith("Reduc Factura Compra", na=False),
         remittance["Tipo de Documento"].str.startswith("Traslado Notas  Deudor acreedor", na=False),
         remittance["Tipo de Documento"].str.startswith("Traslado proximo Pago proveedor", na=False),
-        remittance["Tipo de Documento"].str.startswith("Nota de reintegro", na=False),       
+        remittance["Tipo de Documento"].str.startswith("Nota de reintegro", na=False),
     ]
+
     descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR", "REVISAR", "NOTA CLIENTE"]
-    motivos = ["522", "987", "CSB","987", "987"]
+    motivos = ["522", "987", "CSB", "987", "987"]
+
     remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
     remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
 
@@ -89,13 +117,11 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
     condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
     remittance.loc[condicion, "Descuento"] = "DESCUENTO"
-    remittance.loc[condicion, "Motivo del descuento"] = 987
+    remittance.loc[condicion, "Motivo del descuento"] = "987"
     
 
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "Factura Acrededor": "Factura"
-#        "Devolucion": "Descuentos Clientes",
-#        "Reduc Factura Compra": "Descuentos Clientes"
     })
     
     # =====================================================
