@@ -31,16 +31,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
         # Si necesitas una ruta de salida, puedes definirla aquí:
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Olimpica.xlsx")
     }
-
-    # root = _project_root()
-
-   #  rutas = {
-  #       "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_olimpica.xlsx"),
-#        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N.xlsx"),
-      #   "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_olimpica.xlsx"),
-    #     "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_olimpica.xlsx")
-   #  }
-    # Colocar el Customer ID del cliente
     customer_id = 10266237
 
     # =====================================================

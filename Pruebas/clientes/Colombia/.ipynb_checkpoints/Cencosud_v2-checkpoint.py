@@ -76,17 +76,16 @@ def procesar():
     num_pages = len(reader.pages)
     all_pages = set(range(1, num_pages + 1))
 
-    stream_columns = ["50,150,260,340,420,500,580,650,720,790,860,930,1000,1080"]
-#    stream_columns = ["45,155,265,345,430,505,585,660,735,810,885,960,1035,1110"]
+    column_positions = "50,150,260,340,420,500,580,650,720,790,860,930,1000,1080"
 
     tables_stream = camelot.read_pdf(
         rutas["remittance"],
         pages='all',
         flavor='stream',
         strip_text='\n',
-        columns=stream_columns,     # <<<< AQUI EL AJUSTE CLAVE
-        row_tol=10,                 # mejora la unión de textos multilinea
-        column_tol=8,               # evita que se mezclen columnas cercanas
+        columns=[column_positions] * 50,   # <<< clave: repetir para todas las tablas posibles
+        row_tol=12,
+        column_tol=10,
     )
     
     
@@ -162,6 +161,51 @@ def procesar():
     # Filtrar filas por la primera columna (la del tipo de voucher)
     remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
     
+    # =====================================================
+    # Fix para registros DEC que vienen desfasados (vectorizado)
+    # =====================================================
+    SECCIONES_VALIDAS = ["DROGUE", "PERFUME", "RANCHO", "PLATOS", "ALMAGRAN", "CROSS", "CROSSD"]
+
+    # Solo filas DEC
+    mask_dec = remittance["VOUCHER"] == "DEC"
+    dec_df = remittance.loc[mask_dec].copy()
+
+    # Asegurar columnas existentes
+    for col in ["SECCION", "TIENDA", "DESCRIPCION", "VALOR PAG", "DOC.SOPORTE", "OTROS IMP."]:
+        if col not in dec_df.columns:
+            dec_df[col] = 0 if col in ["VALOR PAG", "DOC.SOPORTE", "OTROS IMP."] else ""
+
+    # Convertir numéricas
+    for col in ["VALOR PAG", "DOC.SOPORTE", "OTROS IMP."]:
+        dec_df[col] = pd.to_numeric(dec_df[col], errors="coerce").fillna(0)
+
+    # 1) Extraer DOCUMENTO y resto
+    def extraer_doc(row):
+        m = re.match(r"^(\d{4}-\d{10})\s+(.*)$", str(row["DOCUMENTO"]).strip())
+        if not m:
+            return pd.Series({"DOCUMENTO": row["DOCUMENTO"], "TIENDA": "", "SECCION": ""})
+        doc_real, resto = m.groups()
+        partes = resto.split()
+        if partes[-1].upper() in SECCIONES_VALIDAS:
+            seccion = partes[-1]
+            tienda = " ".join(partes[:-1])
+        else:
+            seccion = ""
+            tienda = resto
+        return pd.Series({"DOCUMENTO": doc_real, "TIENDA": tienda, "SECCION": seccion})
+
+    dec_df[["DOCUMENTO", "TIENDA", "SECCION"]] = dec_df.apply(extraer_doc, axis=1)
+    dec_df["DESCRIPCION"] = "DTO POR ESCALA VOLU"
+
+    # 2) Intercambio condicional: si OTROS IMP. != 0, moverlo a VALOR PAG y VALOR PAG actual a DOC.SOPORTE
+    mask_intercambio = dec_df["OTROS IMP."] != 0
+    dec_df.loc[mask_intercambio, "DOC.SOPORTE"] = dec_df.loc[mask_intercambio, "VALOR PAG"]
+    dec_df.loc[mask_intercambio, "VALOR PAG"] = dec_df.loc[mask_intercambio, "OTROS IMP."]
+
+    # 3) Reasignar de vuelta al remittance
+    remittance.loc[mask_dec, dec_df.columns] = dec_df
+
+    
     # Tranformamos a numerico el dato "VALOR PAG"
     remittance["VALOR PAG"] = (
         remittance["VALOR PAG"]
@@ -172,9 +216,13 @@ def procesar():
     
     remittance["VALOR PAG"] = pd.to_numeric(remittance["VALOR PAG"], errors="coerce")
 
-    # Parche necesario, dejar. Por lectura de pdf se puede movel el valor de la columna "VALOR PAG" a "DOC.SOPORTE".
-    # Esta linea reemplaza los valores de "VALOR PAG" cuando es 0 por el valor de "DOC.SOPORTE"
-    remittance.loc[remittance["VALOR PAG"] == 0, "VALOR PAG"] = remittance["DOC.SOPORTE"]
+    # En algunos casos, el valor real puede estar en "DOC.SOPORTE" en lugar de "VALOR PAG".
+    # Esta línea asegura que "VALOR PAG" tome el valor que no sea cero entre ambas columnas.
+    remittance["VALOR PAG"] = np.where(
+        remittance["VALOR PAG"] != 0,
+        remittance["VALOR PAG"],  # si VALOR PAG ya tiene valor, lo dejamos
+        remittance["DOC.SOPORTE"]  # si VALOR PAG es 0, usamos DOC.SOPORTE
+    )
 
     # Ordenamiento personalizado
     def sort_key(val):
@@ -254,7 +302,16 @@ def procesar():
     agrupados["Tipo de Documento"] = "Descuentos Clientes"
     agrupados["Descuento"] = agrupados["SECCION"]
     agrupados["Motivo del descuento"] = "987"
-    agrupados["Comentarios"] = agrupados["VOUCHER"] + " DSCTO " + agrupados["DOC.SOPORTE"].fillna("") + " " + agrupados["Referencia / Factura"].fillna("") + " " + agrupados["SECCION"].fillna("")
+    # Paso 1: limpiar DOC.SOPORTE y asegurar que sea string
+    agrupados["DOC.SOPORTE"] = agrupados["DOC.SOPORTE"].fillna("").astype(str).str.replace(".", "", regex=False)
+    # Paso 2: crear Comentarios sin intentar convertir a int
+    agrupados["Comentarios"] = (
+        agrupados["VOUCHER"].astype(str) + " DSCTO " +
+        agrupados["DOC.SOPORTE"] + " " +
+        agrupados["Referencia / Factura"].fillna("").astype(str) + " " +
+        agrupados["SECCION"].fillna("").astype(str)
+    )
+
     remittance = pd.concat([remittance.loc[~mask].copy(), agrupados], ignore_index=True)
 
     # FS

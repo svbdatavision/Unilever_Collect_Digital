@@ -101,7 +101,7 @@ def procesar():
     mask_dev = remittance["Tipo de Documento"] == "Devolucion"
     remittance.loc[mask_dev, ["Descuento", "Motivo del descuento"]] = ["AVERIA", "522"]
     remittance.loc[mask_dev, "Comentarios"] = (
-        remittance.loc[mask_dev, "Tipo de Documento"].astype(str) + + " " +
+        remittance.loc[mask_dev, "Tipo de Documento"].astype(str) + " " +
         remittance.loc[mask_dev, "Referencia / Factura"].astype(str)
     )
     # 2) Traslado Notas Deudor Acreedor

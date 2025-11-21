@@ -35,7 +35,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     rutas = {
         "remittance": archivo_remittance,
         "fbl5n": archivo_fbl5n,
-        # Si necesitas una ruta de salida, puedes definirla aquí:
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Copidrogas.xlsx")
     }
     customer_id = 10267298
@@ -190,9 +189,11 @@ def procesar(archivo_remittance,archivo_fbl5n):
     ws_rem = wb_rem.active
     numero_orden = ws_rem["B7"].value
 
-    fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n["Customer"].iloc[0]
-    nombre_cliente = fbl5n["Name 1"].iloc[0]
+    fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"])
+    FBL5N["Customer"] = pd.to_numeric(FBL5N["Customer"], errors="coerce")
+    fbl5n_filtrado = fbl5n[fbl5n["Customer"] == customer_id]
+    id_cliente = fbl5n_filtrado["Customer"].iloc[0]
+    nombre_cliente = fbl5n_filtrado["Name 1"].iloc[0]
 
     exportar_template(
         hrc_template=hrc_template,

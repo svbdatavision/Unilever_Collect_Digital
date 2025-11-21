@@ -71,10 +71,25 @@ def procesar():
     # 1. Lectura de Remitente
     # =====================================================
     # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
+    
     reader = PdfReader(rutas["remittance"])
     num_pages = len(reader.pages)
     all_pages = set(range(1, num_pages + 1))
 
+    stream_columns = ["50,150,260,340,420,500,580,650,720,790,860,930,1000,1080"]
+#    stream_columns = ["45,155,265,345,430,505,585,660,735,810,885,960,1035,1110"]
+
+    tables_stream = camelot.read_pdf(
+        rutas["remittance"],
+        pages='all',
+        flavor='stream',
+        strip_text='\n',
+        columns=stream_columns,     # <<<< AQUI EL AJUSTE CLAVE
+        row_tol=10,                 # mejora la unión de textos multilinea
+        column_tol=8,               # evita que se mezclen columnas cercanas
+    )
+    
+    
     tables_stream = camelot.read_pdf(
         rutas["remittance"], pages='all', flavor='stream', strip_text='\n'
     )
@@ -141,7 +156,7 @@ def procesar():
 
     # Tipos válidos de VOUCHER para Cencosud
     filter_values = [
-        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL'
+        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL','DEC'
     ]
 
     # Filtrar filas por la primera columna (la del tipo de voucher)
@@ -225,7 +240,7 @@ def procesar():
     remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "Descuento"] + " " + remittance.loc[mask, "Referencia / Factura"]
 
     # Grupo de vouchers: DAT, DAV, DCA, DCC, DCF, DND, DPC, RPC, DCR, RPL
-    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL"]
+    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL", "DEC"]
     mask = remittance["VOUCHER"].isin(grupo)
     agrupados = (
         remittance.loc[mask]

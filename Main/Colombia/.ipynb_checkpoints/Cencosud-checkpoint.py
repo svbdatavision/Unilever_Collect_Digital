@@ -114,7 +114,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # Definimos los tipos de VOUCHER que nos interesan para Cencosud.
     filter_values = [
-        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL'
+        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL', 'DEC'
     ]
     remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
 
@@ -180,7 +180,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "Descuento"] + " " + remittance.loc[mask, "Referencia / Factura"]
 
     # Grupo de vouchers: DAT, DAV, DCA, DCC, DCF, DND, DPC, RPC, DCR, RPL
-    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL"]
+    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL", "DEC"]
     mask = remittance["VOUCHER"].isin(grupo)
     agrupados = (
         remittance.loc[mask]
