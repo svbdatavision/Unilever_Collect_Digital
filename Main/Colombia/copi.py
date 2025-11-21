@@ -38,16 +38,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
         # Si necesitas una ruta de salida, puedes definirla aquí:
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Copidrogas.xlsx")
     }
-    #root = _project_root()
-    
-    # --- Rutas ---
-    #rutas = {
-    #    "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_copi.xlsx"),
-#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
-    #    "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_copi.xlsx"),
-    #    "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_copi.xlsx")
-    #}
-    # Colocar el Customer ID del cliente
     customer_id = 10267298
 
     # =====================================================
@@ -62,77 +52,88 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 4. Limpieza de Remittance
     # =====================================================
+    # Normalizar campos 
     # --- Eliminar guiones de la columna 'Referencia' ---
     remittance["Referencia"] = remittance["Referencia"].astype(str).str.replace("-", "", regex=False)
-
     # --- Renombrar Columnas
     remittance = remittance.rename(columns={
         "Referencia": "Referencia / Factura",
         "Clase": "Tipo de Documento",
         "Importe en ML": "Importe de Remittance",
     })
-    
     # Limpio de nan dataset
     remittance = remittance.dropna(subset=["Tipo de Documento"])
     # --- Intercambiar signo de los valores
     remittance["Importe de Remittance"] = -remittance["Importe de Remittance"]
-    
-    # Si está vacía, tomamos "Clase" para Referencia y "Texto" para Comentarios
-    mask_vacia = remittance["Referencia / Factura"].isna() | (remittance["Referencia / Factura"].astype(str).str.strip() == "nan")
-    remittance.loc[mask_vacia, "Referencia / Factura"] = remittance.loc[mask_vacia, "Tipo de Documento"]
-    remittance.loc[mask_vacia, "Comentarios"] = remittance.loc[mask_vacia, "Texto"]
+    # Normalización de compo "Factura" en Tipo de Documento
+    remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
+        "Factura Acrededor": "Factura"
+    })
+    # Asegurar columnas base
+    for col in ["Descuento", "Motivo del descuento", "Comentarios"]:
+        if col not in remittance.columns:
+            remittance[col] = ""
 
 
     # =====================================================
     # 5. Manejo de Reglas y CARDs
     # =====================================================  
-    for col in ["Descuento", "Motivo del descuento"]:
-        if col not in remittance.columns:
-            remittance[col] = ""
+    # A) REFERENCIA VACÍA → USA "Tipo de Documento"
+    mask_ref_vacia = (
+        remittance["Referencia / Factura"].isna() |
+        (remittance["Referencia / Factura"].astype(str).str.strip().isin(["", "nan"]))
+    )
 
-    conds = [
-        remittance["Tipo de Documento"].str.startswith("Devolucion", na=False),
-        remittance["Tipo de Documento"].str.startswith("Reduc Factura Compra", na=False),
-        remittance["Tipo de Documento"].str.startswith("Traslado Notas  Deudor acreedor", na=False),
-        remittance["Tipo de Documento"].str.startswith("Traslado proximo Pago proveedor", na=False),
-        remittance["Tipo de Documento"].str.startswith("Nota de reintegro", na=False),
-    ]
+    remittance.loc[mask_ref_vacia, "Referencia / Factura"] = remittance.loc[mask_ref_vacia, "Tipo de Documento"]
+    remittance.loc[mask_ref_vacia, "Comentarios"] = remittance.loc[mask_ref_vacia, "Texto"].astype(str)
 
-    descuentos = ["AVERIA", "DESCUENTO", "FACT PROVEEDOR", "REVISAR", "NOTA CLIENTE"]
-    motivos = ["522", "987", "CSB", "987", "987"]
+    # B) DEVOLUCIÓN
+    mask_dev = remittance["Tipo de Documento"] == "Devolucion"
+    remittance.loc[mask_dev, ["Descuento", "Motivo del descuento"]] = ["AVERIA", "522"]
+    remittance.loc[mask_dev, "Comentarios"] = (
+        remittance.loc[mask_dev, "Tipo de Documento"].astype(str) + " " +
+        remittance.loc[mask_dev, "Referencia / Factura"].astype(str)
+    )
 
-    remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
-    remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
+    # C) TRASLADO NOTAS DEUDOR ACREEDOR
+    mask_tnda = remittance["Tipo de Documento"] == "Traslado Notas  Deudor acreedor"
+    remittance.loc[mask_tnda, ["Descuento", "Motivo del descuento"]] = ["Factura proveedor", "CSB"]
+    remittance.loc[mask_tnda, "Comentarios"] = (
+        "FACT PROVEEDOR " + remittance.loc[mask_tnda, "Texto"].astype(str)
+    )
 
-    # --- Condición adicional para textos que comienzan con "DCTO 2.00%" ---
-    mask_dcto = remittance["Texto"].astype(str).str.startswith("DCTO 2.00%")
-    remittance.loc[mask_dcto, "Descuento"] = "DPP NO PROCEDE"
-    remittance.loc[mask_dcto, "Motivo del descuento"] = "667"
+    # D) REDUC FACTURA COMPRA
+    mask_rfc = remittance["Tipo de Documento"] == "Reduc Factura Compra"
+    remittance.loc[mask_rfc, ["Descuento", "Motivo del descuento"]] = ["Ventas", "987"]
+    remittance.loc[mask_rfc, "Comentarios"] = (
+        remittance.loc[mask_rfc, "Tipo de Documento"].astype(str) + " " +
+        remittance.loc[mask_rfc, "Referencia / Factura"].astype(str)
+    )
 
-    # --- Condición adicional para textos que comienzan con "Dev.>" ---
-    mask_dev = remittance["Texto"].astype(str).str.startswith("Dev.>")
-    remittance.loc[mask_dev, "Descuento"] = "AVERIA"
-    remittance.loc[mask_dev, "Motivo del descuento"] = "522"
+    # E) NOTAS
+    mask_nota = remittance["Tipo de Documento"] == "Nota"
+    texto = remittance["Texto"].astype(str)
 
-    # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
-    condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Descuento"].astype(str).str.strip() == "")
-    remittance.loc[condicion, "Descuento"] = "DESCUENTO"
-    remittance.loc[condicion, "Motivo del descuento"] = "987"
-    
+    # Nota → empieza por DCTO
+    mask_dcto = mask_nota & texto.str.startswith("DCTO")
+    remittance.loc[mask_dcto, ["Descuento", "Motivo del descuento"]] = ["DPP", "667"]
+    remittance.loc[mask_dcto, "Comentarios"] = "DPP " + remittance.loc[mask_dcto, "Texto"].astype(str)
 
-    remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
-        "Factura Acrededor": "Factura"
-    })
+    # Nota → empieza por Dev.>
+    mask_dev2 = mask_nota & texto.str.startswith("Dev.>")
+    remittance.loc[mask_dev2, ["Descuento", "Motivo del descuento"]] = ["COL", "522"]
+    remittance.loc[mask_dev2, "Comentarios"] = remittance.loc[mask_dev2, "Texto"].astype(str)
+
+    # Nota → resto de casos
+    mask_resto_nota = mask_nota & ~(mask_dcto | mask_dev2)
+    remittance.loc[mask_resto_nota, ["Descuento", "Motivo del descuento"]] = ["Ventas", "987"]
+    remittance.loc[mask_resto_nota, "Comentarios"] = remittance.loc[mask_resto_nota, "Texto"].astype(str)
     
     # =====================================================
     # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
     # =====================================================
     
     remittance = procesar_descuentos_y_comentarios(remittance)
-    
-    # --- Condición para las Notas que no estan con datos en descuento y motivo de descuento
-#    condicion = (remittance["Tipo de Documento"] == "Nota") & (remittance["Referencia / Factura"].astype(str).str.strip() == "")
-#    remittance.loc[condicion, "Comentario"] = remittance["Texto"]
 
     # =====================================================
     # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)
@@ -165,7 +166,8 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
     
-    hrc_template.loc[hrc_template["Tipo de Documento"] == "Nota de reintegro", ["Descuento", "Comentarios"]] = ""
+    # No se porque pusimos esta linea:
+#    hrc_template.loc[hrc_template["Tipo de Documento"] == "Nota de reintegro", ["Descuento", "Comentarios"]] = ""
 
     # =====================================================
     # 14. Definición de columnas finales para el template
