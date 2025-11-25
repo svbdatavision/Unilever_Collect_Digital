@@ -14,7 +14,7 @@ import io
 import unicodedata
 import pdfplumber, re, statistics, pandas as pd
 
-from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+from utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
  
 # Configuración de advertencias
