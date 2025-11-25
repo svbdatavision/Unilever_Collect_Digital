@@ -80,7 +80,7 @@ procesadores = {
     "Farmatodo": farmatodo,
     "Olimpica": olimpica,
     "Euro": Euro,
-    "Oxxo": Oxxo,
+    "Oxxo": oxxo,
     # Ecuador
     "Favorita": Favorita,
     "FARCOMED": FARCOMED,
