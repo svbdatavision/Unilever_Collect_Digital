@@ -638,7 +638,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
     
     # =====================================================
     # 10. Merge Remittance + FBL5N por "Referencia / Factura"
@@ -685,10 +685,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 15. Preparación de parámetros y extracción de datos dinámicos (para exportar_template)
     # =====================================================
-    # Extraemos id_cliente y nombre_cliente desde el primer registro de FBL5N
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
     
     # Exportamos template final, aplicando formato y copiando hoja de Remittance
     exportar_template(

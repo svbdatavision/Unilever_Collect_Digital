@@ -143,7 +143,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
     
     # =====================================================
     # 10. Merge Remittance + FBL5N por "Referencia / Factura"
@@ -188,12 +188,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     ws_rem = wb_rem.active
     numero_orden = ws_rem["B7"].value
-
-    fbl5n = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"])
-    FBL5N["Customer"] = pd.to_numeric(FBL5N["Customer"], errors="coerce")
-    fbl5n_filtrado = fbl5n[fbl5n["Customer"] == customer_id]
-    id_cliente = fbl5n_filtrado["Customer"].iloc[0]
-    nombre_cliente = fbl5n_filtrado["Name 1"].iloc[0]
 
     exportar_template(
         hrc_template=hrc_template,

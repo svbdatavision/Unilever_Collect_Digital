@@ -5,23 +5,16 @@ def procesar_cartera_cliente(ruta_fbl5n, customer_id):
     Lee el archivo FBL5N desde SAP, filtra solo las filas relevantes para un cliente
     y limpia/renombra columnas para integrarlas al flujo de conciliación.
 
-    Parámetros:
-    ----------
-    ruta_fbl5n : str
-        Ruta al archivo Excel de FBL5N.
-    customer_id : int
-        ID del cliente a filtrar en la columna 'Customer'.
-
     Retorna:
-    -------
-    pd.DataFrame
-        DataFrame filtrado y con columnas renombradas y 'Importe de factura' como float (con decimales).
+        FBL5N (DataFrame filtrado)
+        id_cliente (str)
+        nombre_cliente (str)
     """
 
     # =====================================================
-    # 7. Lectura de la Cartera (FBL5N)
+    # 1. Lectura única del archivo FBL5N
     # =====================================================
-    FBL5N = pd.read_excel(
+    df = pd.read_excel(
         ruta_fbl5n,
         usecols=[
             "Customer",
@@ -37,20 +30,34 @@ def procesar_cartera_cliente(ruta_fbl5n, customer_id):
         engine="openpyxl"
     )
 
-    # =====================================================
-    # 8. Conversión y filtrado de registros
-    # =====================================================
-    # Convertir Customer a numérico
-    FBL5N["Customer"] = pd.to_numeric(FBL5N["Customer"], errors="coerce")
+    # Convertir Customer a numérico para filtrado
+    df["Customer"] = pd.to_numeric(df["Customer"], errors="coerce")
 
-    # Filtrar solo facturas (RV) o casos especiales (NRO) del cliente
-    FBL5N = FBL5N[
-        ((FBL5N["Document Type"] == "RV") | (FBL5N["Reason code"] == "NRO"))
-        & (FBL5N["Customer"] == customer_id)
+    # =====================================================
+    # 2. Extraer meta del cliente ANTES de filtrar Document Type
+    # =====================================================
+    meta_cliente = df[df["Customer"] == customer_id].copy()
+
+    id_cliente = (
+        str(meta_cliente["Customer"].iloc[0])
+        if not meta_cliente.empty else ""
+    )
+
+    nombre_cliente = (
+        meta_cliente["Name 1"].iloc[0]
+        if not meta_cliente.empty else ""
+    )
+
+    # =====================================================
+    # 3. Filtrar solo facturas válidas (RV y NRO) del cliente
+    # =====================================================
+    FBL5N = df[
+        ((df["Document Type"] == "RV") | (df["Reason code"] == "NRO"))
+        & (df["Customer"] == customer_id)
     ].reset_index(drop=True)
 
     # =====================================================
-    # 9. Renombrar columnas clave
+    # 4. Renombrar columnas
     # =====================================================
     FBL5N = FBL5N.rename(columns={
         "Reference": "Referencia / Factura",
@@ -58,20 +65,20 @@ def procesar_cartera_cliente(ruta_fbl5n, customer_id):
     }).reset_index(drop=True)
 
     # =====================================================
-    # 10. Limpieza segura del campo monetario
+    # 5. Limpieza del campo monetario
     # =====================================================
-    # El formato esperado es: -182098.71 o 18098.70
-    # Eliminamos comas de miles y espacios, sin tocar los puntos decimales.
     FBL5N["Importe de factura"] = (
         FBL5N["Importe de factura"]
-        .str.replace(",", "", regex=False)       # quitar comas (miles)
-        .str.replace(r"\s+", "", regex=True)     # quitar espacios
+        .astype(str)
+        .str.replace(",", "", regex=False)     # quitar separador de miles
+        .str.replace(r"\s+", "", regex=True)   # quitar espacios
     )
 
-    # Convertir a float directamente (manteniendo signo y decimales)
-    FBL5N["Importe de factura"] = pd.to_numeric(FBL5N["Importe de factura"], errors="coerce")
+    FBL5N["Importe de factura"] = pd.to_numeric(
+        FBL5N["Importe de factura"], errors="coerce"
+    )
 
     # =====================================================
-    # 11. Retornar el resultado final
+    # 6. Retornar resultados
     # =====================================================
-    return FBL5N
+    return FBL5N, id_cliente, nombre_cliente

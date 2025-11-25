@@ -126,7 +126,7 @@ def procesar():
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
 
     
     # =====================================================
@@ -175,10 +175,6 @@ def procesar():
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     celda = wb_rem.active["C10"].value
     numero_orden = wb_rem.active["F8"].value
-
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
 
     exportar_template(
         hrc_template=hrc_template,

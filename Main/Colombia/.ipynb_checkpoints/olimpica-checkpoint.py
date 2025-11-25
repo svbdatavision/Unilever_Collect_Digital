@@ -11,6 +11,13 @@ from utils import *
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
+def _project_root():
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
 # 2. Función principal del proceso (procesar)
@@ -24,7 +31,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
         # Si necesitas una ruta de salida, puedes definirla aquí:
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Olimpica.xlsx")
     }
-
     customer_id = 10266237
 
     # =====================================================
@@ -111,7 +117,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
 
     
     # =====================================================
@@ -155,10 +161,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     celda = wb_rem.active["C10"].value
     numero_orden = wb_rem.active["F8"].value
-
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
 
     exportar_template(
         hrc_template=hrc_template,
