@@ -21,12 +21,12 @@ from Colombia import (
     oxxo
 )
 from Ecuador import (
-    El_Rosado,
     Favorita, 
     FARCOMED,
     DIFARE, 
     Mega_Santa_Maria, 
-    FARMAENLACE
+    FARMAENLACE,
+    El_Rosado
 )
 
 archivos_remittance = []

@@ -13,6 +13,7 @@ from utils import *
  
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
  
+
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
@@ -51,7 +52,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
             df_all['Importe']
             .str.replace('-', '', regex=False)
         )
-        
+    
     remittance = df_all
         
     # 2.1 Guardar Remittance en buffer en memoria
@@ -66,13 +67,12 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # Limpieza - Renombrar Columnas
  
  
-    remittance = remittance[["Doc/Factura", "No.Documento", "Importe"]]
+    remittance = remittance[["Doc/Factura", "Importe"]]
     remittance = remittance.rename(columns={
-        "Doc/Factura" : "Relación Cliente",
-        "No.Documento": "Referencia / Factura",
+        "Doc/Factura" : "Referencia / Factura",
         "Importe": "Importe de Remittance"
     })
- 
+
     remittance["Importe de Remittance"] = (
     pd.to_numeric(
         remittance["Importe de Remittance"].astype(str)
@@ -82,42 +82,20 @@ def procesar(archivo_remittance,archivo_fbl5n):
         errors="coerce"
     )
     )
-    
-#    remittance["Importe de Remittance"] = remittance["Importe de Remittance"] * -1
 
-# Tipo de Documento (factura / Descuentos Cliente)
-    conds = [
-        remittance["Relación Cliente"].str.startswith("210", na=False) & (remittance["Importe de Remittance"] > 0),
-        ~remittance["Relación Cliente"].str.startswith("210", na=False) & (remittance["Importe de Remittance"] > 0)
-    ]
-    choices = ["Factura", "Descuentos Cliente"]
-    remittance["Tipo de Documento"] = np.select(conds, choices, default="")
- 
+    # 1. Convertir la columna a numérico (ya lo hicimos antes)
+    remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
+
+    # 2. Filtrar filas donde el importe no sea NaN
     remittance = remittance.dropna(subset=["Importe de Remittance"])
-    remittance.loc[remittance["Tipo de Documento"] == "Descuentos Cliente", "Importe de Remittance"] *= -1
 
-    # =====================================================
-    #     Manejo de Reglas y CARDs
-    # =====================================================
- 
-    if "Descuento" not in remittance.columns:
-        remittance["Descuento"] = ""
-    if "Motivo del descuento" not in remittance.columns:
-        remittance["Motivo del descuento"] = ""
-    if "Comentarios" not in remittance.columns:
-        remittance["Comentarios"] = ""    
-    conds_desc = [
-        remittance["Tipo de Documento"].str.startswith("Descuentos Cliente", na=False),
-     ]
-    descuentos = ["DESCUENTO"]
-    motivos = ["987"]
-   
-    remittance.loc[remittance["Tipo de Documento"] == "Descuentos Cliente", "Comentarios"] = (
-    remittance["Relación Cliente"].astype(str) + " " + remittance["Referencia / Factura"].astype(str)
+    # 3. Limpiar la columna 'Referencia / Factura' eliminando guiones
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str.replace("-", "", regex=False)
+
+    # 4. Crear la columna 'Tipo de Documento'
+    remittance["Tipo de Documento"] = remittance["Importe de Remittance"].apply(
+        lambda x: "Factura" if x > 0 else "Descuento"
     )
- 
-    remittance["Motivo del descuento"] = np.select(conds_desc, motivos, default=remittance["Motivo del descuento"])    
-
     # =====================================================
     # Lectura de la Cartera (FBL5N) (datos desde SAP)
     # =====================================================
@@ -143,9 +121,14 @@ def procesar(archivo_remittance,archivo_fbl5n):
 
     # =====================================================
     #  Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
+    # Reemplazar solo valores 'CSR' en 'Motivo del descuento' por '987' (solo cuando exista la columna)
+    if "Motivo del descuento" in hrc_template.columns:
+        mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("CSR")
+        if mask.any():
+            hrc_template.loc[mask, "Motivo del descuento"] = "987"
     # =====================================================
     # Por defecto, 'Pago Neto' = 'Importe de factura'
-   
+
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
     # =====================================================
