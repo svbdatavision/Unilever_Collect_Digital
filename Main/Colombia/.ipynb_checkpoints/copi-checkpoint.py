@@ -188,7 +188,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     ws_rem = wb_rem.active
     numero_orden = ws_rem["B7"].value
-
+    
     exportar_template(
         hrc_template=hrc_template,
         suma_remittance = remittance["Importe de Remittance"].sum(),

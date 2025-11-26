@@ -666,6 +666,14 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # Por defecto, 'Pago Neto' = 'Importe de factura'
     
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+    
+    # Elimina las facturas mal cargadas
+    hrc_template = hrc_template[
+        ~(
+            (hrc_template["Tipo de Documento"] == "Factura") &
+            (hrc_template["Referencia / Factura"].astype(str).str.len() != 10)
+        )
+    ].reset_index(drop=True)
 
     # =====================================================
     # 14. Definición de columnas finales para el template

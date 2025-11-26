@@ -39,8 +39,8 @@ def procesar_cartera_cliente(ruta_fbl5n, customer_id):
     meta_cliente = df[df["Customer"] == customer_id].copy()
 
     id_cliente = (
-        str(meta_cliente["Customer"].iloc[0])
-        if not meta_cliente.empty else ""
+        int(meta_cliente["Customer"].iloc[0])
+        if not meta_cliente.empty else None
     )
 
     nombre_cliente = (
