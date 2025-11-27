@@ -572,16 +572,21 @@ def procesar():
     # Renombramos columna "Referencia / Factura" "FACTURA PROVEEDOR" por "Factura"
     remittance.loc[remittance["Tipo de Documento"] == "FACTURA PROVEEDOR", "Tipo de Documento"] = "Factura"
 
-#    # Limpieza de importes
+    # Extraer números de forma robusta
     remittance["Importe de Remittance"] = (
-        pd.to_numeric(
-            remittance["Importe de Remittance"].astype(str)
+        remittance["Importe de Remittance"]
+            .astype(str)
             .str.replace(".", "", regex=False)
             .str.replace(",", "", regex=False)
-            .str.extract(r"([-\d]+)")[0],
-            errors="coerce"
-        )
+            .str.extract(r"([-\d]+)", expand=False)  # expand=False → devuelve Series, NO DataFrame
     )
+
+    # Convertir a numérico sin romper
+    remittance["Importe de Remittance"] = pd.to_numeric(
+        remittance["Importe de Remittance"],
+        errors="coerce"
+    )
+    
     # Quitamos filas "Importe de Remittance" nulas
     remittance = remittance[remittance["Importe de Remittance"].notna()]
     remittance["Importe de Remittance"] *= -1  # Ajustar signo
