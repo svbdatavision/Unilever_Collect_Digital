@@ -534,7 +534,26 @@ def procesar():
         .drop_duplicates()
         .reset_index(drop=True)
     )
+    
+    # Sobrescribir SECCION con F. REGISTRO solo para valores específicos o dentro de TIENDA
 
+    valores_validos = ["DROGUE", "PERFUME", "PLATOS", "RANCHO"]
+
+    # Asegurar columnas como string
+    for col in ["F. REGISTRO", "TIENDA", "SECCION"]:
+        if col in remittance.columns:
+            remittance[col] = remittance[col].fillna("").astype(str).str.upper().str.strip()
+
+    # 1) Coincidencia exacta en F. REGISTRO
+    if "F. REGISTRO" in remittance.columns:
+        mask_registro = remittance["F. REGISTRO"].isin(valores_validos)
+        remittance.loc[mask_registro, "SECCION"] = remittance.loc[mask_registro, "F. REGISTRO"]
+
+    # 2) Coincidencia parcial dentro de TIENDA
+    if "TIENDA" in remittance.columns:
+        for val in valores_validos:
+            mask_tienda = remittance["TIENDA"].str.contains(val, case=False, na=False)
+            remittance.loc[mask_tienda, "SECCION"] = val
 
     # 2.1 Guardar Remittance en buffer en memoria
     remittance_buffer = io.BytesIO()
@@ -571,16 +590,6 @@ def procesar():
     for col in ["Descuento","Motivo del descuento","Comentarios"]:
         if col not in remittance.columns:
             remittance[col] = ""
-            
-    # Sobrescribir SECCION con F. REGISTRO solo para valores específicos
-    valores_validos = {"DROGUE", "PERFUME", "PLATOS", "RANCHO"}
-
-    if "F. REGISTRO" in remittance.columns:
-        remittance["F. REGISTRO"] = remittance["F. REGISTRO"].fillna("").astype(str).str.strip()
-        remittance["SECCION"] = remittance["SECCION"].fillna("").astype(str).str.strip()
-
-        mask_registro = remittance["F. REGISTRO"].isin(valores_validos)
-        remittance.loc[mask_registro, "SECCION"] = remittance.loc[mask_registro, "F. REGISTRO"]
 
     # =====================================================
     # 5. Manejo de Reglas y CARDs

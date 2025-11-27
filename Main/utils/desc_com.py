@@ -42,11 +42,18 @@ def procesar_descuentos_y_comentarios(remittance):
     # =====================================================
     mask_coment_vacios = remittance["Comentarios"].fillna("").str.strip() == ""
 
-    remittance.loc[mask_coment_vacios, "Comentarios"] = np.where(
-        remittance.loc[mask_coment_vacios, "Tipo de Documento"] == "Factura",
-        "",
-        (remittance.loc[mask_coment_vacios, "Descuento"].fillna("") + " " +
-         remittance.loc[mask_coment_vacios, "Referencia / Factura"].fillna("")).str.strip()
-    )
+    # 3A. Si es factura → Comentarios = ""
+    remittance.loc[
+        mask_coment_vacios & (remittance["Tipo de Documento"] == "Factura"),
+        "Comentarios"
+    ] = ""
+
+    # 3B. Si NO es factura → armar comentario usando Descuento + Referencia
+    mask_no_factura = mask_coment_vacios & (remittance["Tipo de Documento"] != "Factura")
+
+    remittance.loc[mask_no_factura, "Comentarios"] = (
+        remittance.loc[mask_no_factura, "Descuento"].fillna("") + " " +
+        remittance.loc[mask_no_factura, "Referencia / Factura"].fillna("")
+    ).str.strip()
 
     return remittance
