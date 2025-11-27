@@ -513,8 +513,17 @@ def procesar():
     remittance.loc[mask_grande & mask_otros, "VALOR PAG"] = remittance.loc[mask_grande & mask_otros, "OTROS IMP."]
 
     # Aseguramos que DOC.SOPORTE sea string y vacío si <= umbral
-    remittance["DOC.SOPORTE"] = remittance["DOC.SOPORTE"].apply(
-        lambda x: str(x) if clean_to_numeric(pd.Series([x])).iloc[0] > umbral else ""
+    # Convertimos DOC.SOPORTE a número limpio y seguro
+    doc_sop_num = pd.to_numeric(
+        remittance["DOC.SOPORTE"].astype(str).str.replace(".", "", regex=False),
+        errors="coerce"
+    )
+
+    # Reemplazamos según el umbral SIN generar arrays irregulares
+    remittance["DOC.SOPORTE"] = np.where(
+        doc_sop_num > umbral,
+        remittance["DOC.SOPORTE"].astype(str),
+        ""
     )
 
     # OTROS IMP. siempre = 0
