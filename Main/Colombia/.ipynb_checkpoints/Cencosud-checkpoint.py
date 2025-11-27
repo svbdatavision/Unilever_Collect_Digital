@@ -685,13 +685,26 @@ def procesar(archivo_remittance,archivo_fbl5n):
     
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
     
-    # Elimina las facturas mal cargadas
-    hrc_template = hrc_template[
-        ~(
-            (hrc_template["Tipo de Documento"] == "Factura") &
-            (hrc_template["Referencia / Factura"].astype(str).str.len() != 10)
-        )
-    ].reset_index(drop=True)
+    # Normalizar columna REFERENCIA / FACTURA
+    # 1. Reemplaza valores no escalares por string seguro
+    hrc_template["Referencia / Factura"] = (
+        hrc_template["Referencia / Factura"]
+            .apply(lambda x: "" if x is None else str(x))  # convierte todo a texto
+            .str.replace(r"[\[\]\(\)\{\}]", "", regex=True)  # remueve secuencias tipo lista/array
+            .str.replace(r"\s+", " ", regex=True)           # normaliza espacios
+            .str.strip()
+    )
+    # Eliminar facturas mal cargadas
+    # (luego de normalizar y asegurar scalar strings)
+    hrc_template = (
+        hrc_template[
+            ~(
+                (hrc_template["Tipo de Documento"] == "Factura") &
+                (hrc_template["Referencia / Factura"].str.len() != 10)
+            )
+        ]
+        .reset_index(drop=True)
+    )
 
     # =====================================================
     # 14. Definición de columnas finales para el template
