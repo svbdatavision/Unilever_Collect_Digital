@@ -566,6 +566,16 @@ def procesar(archivo_remittance,archivo_fbl5n):
     for col in ["Descuento","Motivo del descuento","Comentarios"]:
         if col not in remittance.columns:
             remittance[col] = ""
+            
+    # Sobrescribir SECCION con F. REGISTRO solo para valores específicos
+    valores_validos = {"DROGUE", "PERFUME", "PLATOS", "RANCHO"}
+
+    if "F. REGISTRO" in remittance.columns:
+        remittance["F. REGISTRO"] = remittance["F. REGISTRO"].fillna("").astype(str).str.strip()
+        remittance["SECCION"] = remittance["SECCION"].fillna("").astype(str).str.strip()
+
+        mask_registro = remittance["F. REGISTRO"].isin(valores_validos)
+        remittance.loc[mask_registro, "SECCION"] = remittance.loc[mask_registro, "F. REGISTRO"]
 
 
     # =====================================================
