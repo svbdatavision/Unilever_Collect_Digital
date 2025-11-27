@@ -15,13 +15,22 @@ def merge_remittance_cartera(remittance, FBL5N):
     # Hacemos una copia para no modificar el original
     hrc_template = remittance.copy()
     
+
+    # Merge SOLO por referencia, sin filtrar facturas todavía
+    merged = pd.merge(
+        remittance[["Referencia / Factura"]],
+        FBL5N,
+        on="Referencia / Factura",
+        how="left",
+        suffixes=("", "_FBL5N")
+    )
+    
     # Filtramos solo las facturas
     facturas = remittance[
         (remittance["Tipo de Documento"] == "Factura")
         & (remittance["Referencia / Factura"].isin(FBL5N["Referencia / Factura"]))
     ]
 
-    
     # Hacemos el merge solo con esas filas
     facturas_merged = pd.merge(
         facturas,
@@ -31,20 +40,15 @@ def merge_remittance_cartera(remittance, FBL5N):
         suffixes=("", "_FBL5N")  # evita colisiones de nombres
     )
 
-    # ELIMINAR FACTURAS SIN MATCH 
-    facturas_merged = facturas_merged[facturas_merged["Referencia / Factura"].isin(FBL5N["Referencia / Factura"])]  
+    # Columnas nuevas (solo las del FBL5N)
+    columnas_nuevas = [col for col in merged.columns if col not in remittance.columns]
 
-    # Determinamos columnas nuevas provenientes de FBL5N
-    columnas_nuevas = [col for col in facturas_merged.columns if col not in remittance.columns]
-    
-    # Insertamos esas columnas en hrc_template (vacías por defecto)
+    # Añadir columnas nuevas vacías
     for col in columnas_nuevas:
         hrc_template[col] = None
-    
-    # Reemplazamos los valores de las filas que son facturas
-    hrc_template.loc[
-        hrc_template["Tipo de Documento"] == "Factura",
-        columnas_nuevas
-    ] = facturas_merged[columnas_nuevas].values
-    
+
+    # Asignar SOLO donde coincide la factura
+    mask = hrc_template["Tipo de Documento"] == "Factura"
+    hrc_template.loc[mask, columnas_nuevas] = merged.loc[mask, columnas_nuevas].values
+
     return hrc_template
