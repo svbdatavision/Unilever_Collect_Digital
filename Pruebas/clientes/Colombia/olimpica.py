@@ -69,18 +69,19 @@ def procesar():
         "Total a Pagar": "Importe de Remittance"
     })
 
-    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde) y cuando aparezca "CP"
+    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde) y cuando aparezca "CP" o "CD"
     remittance["Referencia / Factura"] = (
         remittance["Referencia / Factura"]
         .astype(str)
         .str[0:-3]
         .str.replace("CP", "", regex=False)
     )
+
     
     # Mapear códigos a nombres Tipo de Documento"
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "380": "Factura",
-        "381": "Descuentos Clientes"
+        "381": "Descuentos Cliente"
     })
 
     # Normalizar: quitar separador de miles y estandarizar decimales
@@ -142,12 +143,7 @@ def procesar():
     # =====================================================
     # 11. Cálculo de diferencias
     # =====================================================
-#    hrc_template = procesar_diferencias(hrc_template)
-    # Parche Valores de descuentos
-    hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
-    hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),
-    hrc_template["Importe de Remittance"]
-    )
+    hrc_template = procesar_diferencias(hrc_template)
 
     # =====================================================
     # 12. Agregamos registros NRO
@@ -158,8 +154,7 @@ def procesar():
     # 13. Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
     # =====================================================
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
-     
-
+    
     # =====================================================
     # 14. Definición de columnas finales para el template
     # =====================================================

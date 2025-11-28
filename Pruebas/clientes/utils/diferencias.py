@@ -44,7 +44,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     # =====================================================
     grandes_lineas = grandes_dif.assign(
         **{
-            "Tipo de Documento": "Descuento Cliente",
+            "Tipo de Documento": "Descuentos Clientes",
             "Importe de Remittance": grandes_dif["Diferencia"],
             "Pago Neto": "",
             "Descuento": grandes_dif["Diferencia"].apply(
@@ -85,7 +85,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
             # Si agregar esta línea supera el rango permitido ±20000 → cerrar bloque
             if abs(nueva_suma) > 20000 and bloque:
                 registros_menores.append({
-                    "Tipo de Documento": "Descuento Cliente",
+                    "Tipo de Documento": "Descuentos Clientes",
                     "Referencia / Factura": "MENORES VALORES",
                     "Importe de Remittance": acumulado,
                     "Pago Neto": "",
@@ -103,7 +103,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
         # Cerrar el último bloque si queda algo
         if bloque:
             registros_menores.append({
-                "Tipo de Documento": "Descuento Cliente",
+                "Tipo de Documento": "Descuentos Clientes",
                 "Referencia / Factura": "MENORES VALORES",
                 "Importe de Remittance": acumulado,
                 "Pago Neto": "",

@@ -108,7 +108,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
     # =====================================================
     grandes_lineas = grandes_dif.assign(
         **{
-            "Tipo de Documento": "Descuento Cliente",
+            "Tipo de Documento": "Descuentos Clientes",
             "Importe de Remittance": grandes_dif["Diferencia"],
             "Pago Neto": "",
             "Descuento": grandes_dif["Diferencia"].apply(lambda x: "Menor Vlr Pagado" if x < 0 else "Myr Vlr Pagado"),
@@ -136,7 +136,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
         if len(menores_dif) > 20:
             suma_total = menores_dif["Diferencia"].sum()
             registros_menores = pd.DataFrame([{
-                "Tipo de Documento": "Descuento Cliente",
+                "Tipo de Documento": "Descuentos Clientes",
                 "Referencia / Factura": "MENORES VALORES",
                 "Importe de Remittance": suma_total,
                 "Pago Neto": "",
@@ -157,7 +157,7 @@ def procesar_diferencias(hrc_template: pd.DataFrame) -> pd.DataFrame:
 
             registros_menores = menores_dif.assign(
                 **{
-                    "Tipo de Documento": "Descuento Cliente",
+                    "Tipo de Documento": "Descuentos Clientes",
                     "Importe de Remittance": menores_dif["Diferencia"],
                     "Pago Neto": "",
                     "Descuento": "MENORES VALORES",
