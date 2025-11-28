@@ -16,7 +16,7 @@ from openpyxl import load_workbook  # Lectura de archivos Excel (.xlsx)
 import pdfplumber
 import traceback
 
-from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+from utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
 # Configuración de advertencias
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Suprime advertencias generadas por Camelot (usualmente por manejo de PDFs)
@@ -47,20 +47,15 @@ def _project_root():
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
-def procesar():
-    """
-    Orquestador principal para Cencosud
-    """
-    root = _project_root()
+def procesar(archivo_remittance,archivo_fbl5n):
 
-    # --- Rutas de entrada/salida ---
+
     rutas = {
-        "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),  # Cencosud
-#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
-        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_Cenco.xlsx"),
-        "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_Cenco.xlsx")
+        "remittance": archivo_remittance,
+        "fbl5n": archivo_fbl5n,
+        # Si necesitas una ruta de salida, puedes definirla aquí:
+        "salida": os.path.join(os.path.dirname(archivo_remittance), "Cencosud.xlsx")
     }
-    # Colocar el Customer ID del cliente
     customer_id = 10267301
 
     # =====================================================
@@ -529,7 +524,6 @@ def procesar():
     # OTROS IMP. siempre = 0
     remittance["OTROS IMP."] = 0
 
-    
     # Ordenamiento personalizado
     def sort_key(val):
         if val == "VOUCHER": return "0"
@@ -596,7 +590,7 @@ def procesar():
         remittance["Importe de Remittance"],
         errors="coerce"
     )
-    
+
     # Quitamos filas "Importe de Remittance" nulas
     remittance = remittance[remittance["Importe de Remittance"].notna()]
     remittance["Importe de Remittance"] *= -1  # Ajustar signo
@@ -605,7 +599,7 @@ def procesar():
     for col in ["Descuento","Motivo del descuento","Comentarios"]:
         if col not in remittance.columns:
             remittance[col] = ""
-
+            
     # =====================================================
     # 5. Manejo de Reglas y CARDs
     # =====================================================
@@ -684,6 +678,7 @@ def procesar():
     # Se realiza un merge tipo "left" sobre 'Referencia / Factura' para mantener todas
     # las filas de Remittance y añadir información de FBL5N cuando exista coincidencia
     hrc_template = merge_remittance_cartera(remittance, FBL5N)
+    
 
     # =====================================================
     # 11. Cálculo de diferencias

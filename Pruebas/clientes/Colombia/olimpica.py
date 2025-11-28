@@ -69,9 +69,14 @@ def procesar():
         "Total a Pagar": "Importe de Remittance"
     })
 
-    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde)
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str[0:-3]
-
+    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde) y cuando aparezca "CP"
+    remittance["Referencia / Factura"] = (
+        remittance["Referencia / Factura"]
+        .astype(str)
+        .str[0:-3]
+        .str.replace("CP", "", regex=False)
+    )
+    
     # Mapear códigos a nombres Tipo de Documento"
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "380": "Factura",

@@ -529,6 +529,7 @@ def procesar():
     # OTROS IMP. siempre = 0
     remittance["OTROS IMP."] = 0
 
+    
     # Ordenamiento personalizado
     def sort_key(val):
         if val == "VOUCHER": return "0"
