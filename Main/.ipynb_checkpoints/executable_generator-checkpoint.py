@@ -21,12 +21,12 @@ from Colombia import (
     oxxo
 )
 from Ecuador import (
-    El_Rosado,
     Favorita, 
     FARCOMED,
     DIFARE, 
     Mega_Santa_Maria, 
-    FARMAENLACE
+    FARMAENLACE,
+    El_Rosado
 )
 
 archivos_remittance = []
@@ -80,7 +80,7 @@ procesadores = {
     "Farmatodo": farmatodo,
     "Olimpica": olimpica,
     "Euro": Euro,
-    "Oxxo": Oxxo,
+    "Oxxo": oxxo,
     # Ecuador
     "Favorita": Favorita,
     "FARCOMED": FARCOMED,

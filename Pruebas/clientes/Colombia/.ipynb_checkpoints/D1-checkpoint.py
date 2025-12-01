@@ -48,6 +48,7 @@ def procesar():
         "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_d1.xlsx"),
         "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_D1.xlsx")
     }
+    customer_id = 30638031
 
     # =====================================================
     # 1. Lectura de Remitente
@@ -113,55 +114,15 @@ def procesar():
     # No va.
 
     # =====================================================
-    # 4. Lectura de la Cartera (FBL5N) (datos desde SAP)
+    # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)
     # =====================================================
-    # Se leen solo las columnas necesarias, todo como texto (dtype=str) para evitar errores de tipo
-    # 'engine="openpyxl"' es el más estable y rápido para archivos .xlsx
-    FBL5N = pd.read_excel(
-        rutas["fbl5n"],
-        usecols=[
-            "Document Type",
-            "Reference",
-            "Amount in local currency",
-            "Reason code",
-            "Name 1"
-        ],
-        dtype=str,
-        engine="openpyxl"
-    )
-    
     # =====================================================
-    # 5. Filtro de la cartera del cliente (traer solo RV / facturas relevantes)
+    # 8. Filtro de la cartera del cliente
     # =====================================================
-    # Se conservan únicamente las filas donde:
-    #   - "Document Type" == "RV" (facturas)
-    #   - O "Reason code" == "NRO" (casos especiales)
-    #   - Y además el campo "Name 1" contenga "SUPERTIENDAS Y DROGUERIAS OLIM"
-    FBL5N = FBL5N[
-        ((FBL5N["Document Type"] == "RV") | (FBL5N["Reason code"] == "NRO"))
-        & (FBL5N["Name 1"].str.contains("D1 S A S", case=False, na=False))
-    ].reset_index(drop=True)
-    
     # =====================================================
-    # 6. Renombrado de columnas 
+    # 9. Renombrado y limpieza de columnas
     # =====================================================
-    # Se renombran las columnas clave para mayor claridad y consistencia con el resto del proceso.
-    FBL5N = FBL5N.rename(columns={
-        "Reference": "Referencia / Factura",
-        "Amount in local currency": "Importe de factura"
-    })
-    
-    # Crear una máscara booleana que detecte valores entre paréntesis (formato contable negativo)
-    mask_negativo = FBL5N["Importe de factura"].str.contains(r"\(", regex=True)
-
-    # Limpiar y convertir los valores
-    FBL5N["Importe de factura"] = (
-        FBL5N["Importe de factura"]
-        .str.replace(",", "", regex=False)       # eliminar separadores de miles
-        .str.replace(r"[\(\)]", "", regex=True)  # eliminar paréntesis
-        .astype(float)                           # convertir a float
-        * mask_negativo.map(lambda x: -1 if x else 1)  # aplicar signo negativo
-    )
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
     
     # =====================================================
     # 7. Merge entre Remittance y FBL5N por "Referencia / Factura"
@@ -205,11 +166,8 @@ def procesar():
     # =====================================================
     # 12. Generación de parámetros de entrada para la función exportar_template
     # =====================================================
-    # FALTA: Extraer numero_orden, id_cliente, nombre_cliente dinámicamente
     numero_orden = ""
-    id_cliente = ""
-    nombre_cliente = ""
-
+    
     exportar_template(
         hrc_template=hrc_template,
         suma_remittance = remittance["Importe de Remittance"].sum(),

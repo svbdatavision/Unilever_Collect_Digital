@@ -15,21 +15,45 @@ def procesar_descuentos_y_comentarios(remittance):
     Retorna:
         pd.DataFrame: remittance actualizado con las columnas 'Descuento' y 'Comentarios' procesadas.
     """
-    # Asegurar tipo string y limpiar nulos
+
+    # =====================================================
+    # 0. Asegurar existencia de columnas requeridas
+    # =====================================================
+    for col in ["Descuento", "Comentarios"]:
+        if col not in remittance.columns:
+            remittance[col] = ""
+
+    # =====================================================
+    # 1. Asegurar tipo string y limpiar nulos
+    # =====================================================
     remittance["Descuento"] = remittance["Descuento"].fillna("").astype(str)
 
-    # Completar 'DESCUENTO' solo si está vacío y no es factura
+    # =====================================================
+    # 2. Completar 'DESCUENTO' solo si está vacío y no es factura
+    # =====================================================
     remittance.loc[
         (remittance["Descuento"].str.strip() == "") &
         (remittance["Tipo de Documento"] != "Factura"),
         "Descuento"
     ] = "DESCUENTO"
 
-    # Asignar 'Comentarios'
-    remittance["Comentarios"] = np.where(
-        remittance["Tipo de Documento"] == "Factura",
-        "",
-        (remittance["Descuento"].fillna("") + " " + remittance["Referencia / Factura"].fillna("")).str.strip()
-    )
+    # =====================================================
+    # 3. Asignar 'Comentarios' solo si están vacíos
+    # =====================================================
+    mask_coment_vacios = remittance["Comentarios"].fillna("").str.strip() == ""
+
+    # 3A. Si es factura → Comentarios = ""
+    remittance.loc[
+        mask_coment_vacios & (remittance["Tipo de Documento"] == "Factura"),
+        "Comentarios"
+    ] = ""
+
+    # 3B. Si NO es factura → armar comentario usando Descuento + Referencia
+    mask_no_factura = mask_coment_vacios & (remittance["Tipo de Documento"] != "Factura")
+
+    remittance.loc[mask_no_factura, "Comentarios"] = (
+        remittance.loc[mask_no_factura, "Descuento"].fillna("") + " " +
+        remittance.loc[mask_no_factura, "Referencia / Factura"].fillna("")
+    ).str.strip()
 
     return remittance

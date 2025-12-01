@@ -69,13 +69,19 @@ def procesar():
         "Total a Pagar": "Importe de Remittance"
     })
 
-    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde)
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str[0:-3]
+    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde) y cuando aparezca "CP" o "CD"
+    remittance["Referencia / Factura"] = (
+        remittance["Referencia / Factura"]
+        .astype(str)
+        .str[0:-3]
+        .str.replace("CP", "", regex=False)
+    )
 
+    
     # Mapear códigos a nombres Tipo de Documento"
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "380": "Factura",
-        "381": "Descuentos Clientes"
+        "381": "Descuentos Cliente"
     })
 
     # Normalizar: quitar separador de miles y estandarizar decimales
@@ -126,7 +132,7 @@ def procesar():
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
 
     
     # =====================================================
@@ -137,12 +143,7 @@ def procesar():
     # =====================================================
     # 11. Cálculo de diferencias
     # =====================================================
-#    hrc_template = procesar_diferencias(hrc_template)
-    # Parche Valores de descuentos
-    hrc_template["Importe de factura"] = hrc_template["Importe de factura"].where(
-    hrc_template["Importe de factura"].notna() & (hrc_template["Importe de factura"] != ""),
-    hrc_template["Importe de Remittance"]
-    )
+    hrc_template = procesar_diferencias(hrc_template)
 
     # =====================================================
     # 12. Agregamos registros NRO
@@ -153,8 +154,7 @@ def procesar():
     # 13. Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
     # =====================================================
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
-     
-
+    
     # =====================================================
     # 14. Definición de columnas finales para el template
     # =====================================================
@@ -175,10 +175,6 @@ def procesar():
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     celda = wb_rem.active["C10"].value
     numero_orden = wb_rem.active["F8"].value
-
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
 
     exportar_template(
         hrc_template=hrc_template,

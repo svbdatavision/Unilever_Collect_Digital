@@ -31,16 +31,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
         # Si necesitas una ruta de salida, puedes definirla aquí:
         "salida": os.path.join(os.path.dirname(archivo_remittance), "Olimpica.xlsx")
     }
-
-    # root = _project_root()
-
-   #  rutas = {
-  #       "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_olimpica.xlsx"),
-#        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N.xlsx"),
-      #   "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_olimpica.xlsx"),
-    #     "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_olimpica.xlsx")
-   #  }
-    # Colocar el Customer ID del cliente
     customer_id = 10266237
 
     # =====================================================
@@ -70,9 +60,13 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "Total a Pagar": "Importe de Remittance"
     })
 
-    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde)
-    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str[0:-3]
-
+    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde) y cuando aparezca "CP"
+    remittance["Referencia / Factura"] = (
+        remittance["Referencia / Factura"]
+        .astype(str)
+        .str[0:-3]
+        .str.replace("CP", "", regex=False)
+    )
     # Mapear códigos a nombres Tipo de Documento"
     remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
         "380": "Factura",
@@ -127,7 +121,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
 
     
     # =====================================================
@@ -171,10 +165,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     wb_rem = load_workbook(rutas["remittance"], data_only=True)
     celda = wb_rem.active["C10"].value
     numero_orden = wb_rem.active["F8"].value
-
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
 
     exportar_template(
         hrc_template=hrc_template,

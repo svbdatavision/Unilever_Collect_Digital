@@ -13,8 +13,9 @@ from openpyxl import load_workbook
 import io
 import unicodedata
 import pdfplumber, re, statistics, pandas as pd
- 
-from utils import *
+
+from utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+
  
 # Configuración de advertencias
 # warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Suprime advertencias generadas por Camelot (usualmente por manejo de PDFs)
@@ -32,18 +33,23 @@ def _project_root():
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
-def procesar(archivo_remittance,archivo_fbl5n):
+def procesar():
+    """
+    Orquestador principal para Cencosud
+    """
+    root = _project_root()
+
+    # --- Rutas de entrada/salida ---
     rutas = {
-    "pdf_remittance": archivo_remittance,
-    "fbl5n": archivo_fbl5n,
+        "remittance": archivo_remittance,
+        "fbl5n": archivo_fbl5n,
         # Si necesitas una ruta de salida, puedes definirla aquí:
-    "salida": os.path.join(os.path.dirname(archivo_remittance), "Euro.xlsx")
-}
+        "salida": os.path.join(os.path.dirname(archivo_remittance), "Euro.xlsx")
+    }
     # Colocar el Customer ID del cliente
     customer_id = 10309611
- 
+    
     results = []
-   
     # =====================================================
     # 1. Lectura de Remitente
     # =====================================================
@@ -52,7 +58,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         """
         Busca prefijo PMP/DEC/PM/DE + número en cualquier lugar de la fila
         """
-       
+ 
         full_txt = ' '.join(filter(None, [doccol, co, detalle])).replace('\n', ' ')
         prefix_match = re.search(r'\b(PMP|DEC|PM|DE|DEV)\b', full_txt, flags=re.IGNORECASE)
         num_match    = re.search(r'\b(\d{3,10})\b', full_txt.replace(',', ''))
@@ -117,7 +123,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         return merged
  
     # --- Lectura del PDF ---
-    with pdfplumber.open(rutas["pdf_remittance"]) as pdf:
+    with pdfplumber.open(rutas["remittance"]) as pdf:
         for pnum, page in enumerate(pdf.pages, start=1):
             words = page.extract_words()
             if not words:
@@ -344,10 +350,9 @@ def procesar(archivo_remittance,archivo_fbl5n):
     df_final.rename(columns={"Valor Pago": "Importe de Remittance"}, inplace=True)
     df_final.rename(columns={"Doc.Cruce": "Referencia / Factura"}, inplace=True)
  
-    #========================================================================
-    # Aplicar Reglas (CARDs)
-    #========================================================================
- 
+    # =====================================================
+    # 5. Manejo de Reglas y CARDs
+    # =====================================================
     # Ensure the columns exist
     if "Tipo de Documento" in df_final.columns and "C.O." in df_final.columns:
         # Create empty columns if they don't exist
@@ -370,8 +375,8 @@ def procesar(archivo_remittance,archivo_fbl5n):
         descuentos = ["DESCUENTO"] * len(conds_desc)
         motivos = ["987"] * len(conds_desc)
  
-        df_final["Descuento"] = np.select(conds_desc, descuentos, default=df_final["Descuento"])
-        df_final["Motivo del descuento"] = np.select(conds_desc, motivos, default=df_final["Motivo del descuento"])
+        df_final["Descuento"] = np.select(conds_desc, descuentos, default = df_final["Descuento"])
+        df_final["Motivo del descuento"] = np.select(conds_desc, motivos, default = df_final["Motivo del descuento"])
         mask = df_final["Tipo de Documento"] == "Descuento Cliente"
         df_final.loc[mask, "Comentarios"] = (
             df_final.loc[mask, "Descuento"].astype(str) + " " +
@@ -379,8 +384,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
             df_final.loc[mask, "Referencia / Factura"].astype(str)
         )
        
-    remittance = df_final    
-   
+    remittance = df_final
     # =====================================================
     # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
     # =====================================================
@@ -396,7 +400,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
    
     # =====================================================
     # 10. Merge Remittance + FBL5N por "Referencia / Factura"
@@ -443,10 +447,6 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 15. Preparación de parámetros y extracción de datos dinámicos (para exportar_template)
     # =====================================================
-    # Extraemos id_cliente y nombre_cliente desde el primer registro de FBL5N
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
    
     # Exportamos template final, aplicando formato y copiando hoja de Remittance
     exportar_template(

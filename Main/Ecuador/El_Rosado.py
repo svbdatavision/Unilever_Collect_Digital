@@ -13,7 +13,11 @@ from utils import *
  
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
  
+<<<<<<< HEAD
  
+=======
+
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
@@ -52,7 +56,11 @@ def procesar(archivo_remittance,archivo_fbl5n):
             df_all['Importe']
             .str.replace('-', '', regex=False)
         )
+<<<<<<< HEAD
    
+=======
+    
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     remittance = df_all
        
     # 2.1 Guardar Remittance en buffer en memoria
@@ -72,7 +80,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "Doc/Factura" : "Referencia / Factura",
         "Importe": "Importe de Remittance"
     })
- 
+
     remittance["Importe de Remittance"] = (
     pd.to_numeric(
         remittance["Importe de Remittance"].astype(str)
@@ -82,6 +90,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         errors="coerce"
     )
     )
+<<<<<<< HEAD
  
     # 1. Convertir la columna a numérico (ya lo hicimos antes)
     remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
@@ -92,12 +101,27 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # 3. Limpiar la columna 'Referencia / Factura' eliminando guiones
     remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str.replace("-", "", regex=False)
  
+=======
+
+    # 1. Convertir la columna a numérico (ya lo hicimos antes)
+    remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
+
+    # 2. Filtrar filas donde el importe no sea NaN
+    remittance = remittance.dropna(subset=["Importe de Remittance"])
+
+    # 3. Limpiar la columna 'Referencia / Factura' eliminando guiones
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str.replace("-", "", regex=False)
+
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     # 4. Crear la columna 'Tipo de Documento'
     remittance["Tipo de Documento"] = remittance["Importe de Remittance"].apply(
         lambda x: "Factura" if x > 0 else "Descuento"
     )
+<<<<<<< HEAD
  
     print(remittance)
+=======
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     # =====================================================
     # Lectura de la Cartera (FBL5N) (datos desde SAP)
     # =====================================================
@@ -128,6 +152,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
         mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("CSR")
         if mask.any():
             hrc_template.loc[mask, "Motivo del descuento"] = "987"
+<<<<<<< HEAD
     if "Motivo del descuento" in hrc_template.columns:
         mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("384")
         if mask.any():
@@ -135,6 +160,11 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # Por defecto, 'Pago Neto' = 'Importe de factura'
  
+=======
+    # =====================================================
+    # Por defecto, 'Pago Neto' = 'Importe de factura'
+
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
  
     # =====================================================
@@ -179,4 +209,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
  
 # Devolución del template final
     return hrc_template
+<<<<<<< HEAD
  
+=======
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8

@@ -1,46 +1,21 @@
-# =====================================================
-# 0. Importación de librerías y módulos utilitarios
-# =====================================================
+import os
+import sys
+import re
+import warnings
+import camelot
+import pdfplumber
+import pandas as pd
+import numpy as np
+import traceback
+import io
+from clientes.utils import *
 
-import os       # Manejo de rutas y directorios del sistema operativo
-import sys      # Detección de ejecución empaquetada y manipulación de rutas del intérprete
-import re       # Expresiones regulares (búsqueda y limpieza de texto)
-import io        # Manejo de flujos de datos en memoria (buffers, streams)
-import warnings # Control de advertencias del sistema y librerías externas
-
-import numpy as np  # Operaciones numéricas y lógicas (np.where, np.select, etc.)
-import pandas as pd  # Manipulación y análisis de datos tabulares
-import camelot   # Extracción de tablas desde archivos PDF
-from PyPDF2 import PdfReader  # Lectura y procesamiento de archivos PDF
-from openpyxl import load_workbook  # Lectura de archivos Excel (.xlsx)
-
-# Buscamos las funciones en la carpeta Main
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
-# sys.path.append(project_root)
-# from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
-
-from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
-
-# Configuración de advertencias
-warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Suprime advertencias generadas por Camelot (usualmente por manejo de PDFs)
-
+warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
 
 # =====================================================
-# 1. Localización dinámica de la carpeta raíz del proyecto
+# Ruta raíz del proyecto
 # =====================================================
 def _project_root():
-    """
-    Obtiene la ruta base del proyecto sin importar el entorno de ejecución.
-
-    - Si el código se ejecuta empaquetado (por ejemplo, como .app o .exe),
-      sube desde la ruta del ejecutable hasta la carpeta que contiene el proyecto.
-    - Si se ejecuta como script Python normal, sube dos niveles desde
-      el archivo actual (../..), asumiendo la estructura estándar del proyecto.
-
-    Devuelve:
-        str: Ruta absoluta a la carpeta raíz del proyecto.
-    """
     if getattr(sys, "frozen", False):
         macos_dir = os.path.dirname(sys.executable)
         contents_dir = os.path.dirname(macos_dir)
@@ -49,138 +24,480 @@ def _project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # =====================================================
-# 2. Función principal del proceso (procesar)
+# 2. Función principal del proceso 
 # =====================================================
 def procesar():
-    """
-    Orquestador principal para Cencosud
-    """
     root = _project_root()
 
-    # --- Rutas de entrada/salida ---
     rutas = {
-        "pdf_remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),  # Cencosud
-#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
+        "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),
         "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_Cenco.xlsx"),
         "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_Cenco.xlsx")
     }
-    # Colocar el Customer ID del cliente
+
     customer_id = 10267301
 
     # =====================================================
     # 1. Lectura de Remitente
     # =====================================================
-    # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
-    reader = PdfReader(rutas["pdf_remittance"])
-    num_pages = len(reader.pages)
-    all_pages = set(range(1, num_pages + 1))
+    # ------------------------
+    # Configuración y patrones
+    # ------------------------
 
-    tables_stream = camelot.read_pdf(
-        rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n'
-    )
-    stream_pages = set(int(t.page) for t in tables_stream)
-    missing_pages = all_pages - stream_pages
+    # Vouchers reconocidos
+    VOUCHERS = r"(FS|CH|DEC|NC|ND|LTG|FPM|DCA|DCF|DND|DAV|DCC|RPL|DAT|DEV|DPC)"
+    pat_inicio = re.compile(rf"^{VOUCHERS}\b", flags=re.IGNORECASE)
 
-    tables_lattice = []
-    if missing_pages:
-        missing_pages_str = ",".join(str(p) for p in missing_pages)
-        tables_lattice = camelot.read_pdf(
-            rutas["pdf_remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
-        )
+    # Patrones para documentos específicos
+    pat_documento_dec = re.compile(r"\b(\d{4}-\d{7,20})\b")     # DEC
+    pat_documento_pmp = re.compile(r"\b(PMP\d{3,20})\b")        # PMP / LTG / FPM
+    pat_documento_fs_pair = re.compile(r"\b([A-Z0-9]{2,6})\s+(\d{5,12})\b")  # FS
+    pat_fecha = re.compile(r"\d{2}/\d{2}/\d{4}")                # Fecha
 
-    # Concatenar todas las tablas detectadas
-    df_all = pd.concat([t.df for t in list(tables_stream) + list(tables_lattice)], ignore_index=True)
+    # Secciones posibles
+    SECCIONES = {"PERFUME", "DROGUE", "RANCHO", "PLATOS"}
 
-    # =====================================================
-    # Detectar fila de ENCABEZADO real (DOCUMENTO o VOUCHER)
-    # =====================================================
+    # -----------------------
+    # Funciones utilitarias
+    # -----------------------
 
-    header_idx_candidates = df_all.apply(
-        lambda row: row.astype(str).str.contains("DOCUMENTO", case=False).any()
-                     or row.astype(str).str.contains("VOUCHER", case=False).any(),
-        axis=1
-    )
+    def normalize_whitespace(s: str) -> str:
+        """Quita espacios extra y normaliza la cadena."""
+        return re.sub(r"\s+", " ", s).strip()
 
-    if not header_idx_candidates.any():
-        raise ValueError(
-            "No se encontró encabezado válido (ni 'DOCUMENTO' ni 'VOUCHER')\n"
-            f"Primeras filas detectadas:\n{df_all.head()}"
-        )
+    def is_start_of_record(line: str) -> bool:
+        """Verifica si una línea comienza con un voucher reconocido."""
+        return bool(pat_inicio.match(line.strip()))
 
-    header_row_idx = header_idx_candidates.idxmax()
-    
-    # Convertimos esa fila en encabezado real
-    df_all.columns = df_all.iloc[header_row_idx]
-    df_all = df_all.drop(index=list(range(0, header_row_idx + 1))).reset_index(drop=True)
-    
-    # ---- LIMPIAR COLUMNAS NO VÁLIDAS (ANTES DE NORMALIZAR) ----
-    df_all = df_all.loc[:, ~df_all.columns.isna()]
+    def merge_lines(lines):
+        """
+        Une todas las líneas de un mismo registro:
+        - Si empieza con voucher → nuevo registro
+        - Si no, se agrega al registro actual
+        Esto asegura que multi-líneas en DESCRIPCION o TIENDA queden juntas.
+        """
+        registros = []
+        buffer = ""
 
-    # ---- NORMALIZAR NOMBRES DE COLUMNAS ----
-    df_all.columns = (
-        df_all.columns.astype(str)
-        .str.replace(r"[\n\r]+", " ", regex=True)
-        .str.replace(r"\s+", " ", regex=True)
-        .str.strip()
-        .str.upper()          # Todo en mayúsculas para emparejar
-    )
+        for raw in lines:
+            line = raw.strip()
+            if not line:
+                continue
 
-    # ---- RENOMBRAR COLUMNA DOCUMENTO SIN IMPORTAR COMO SALGA ----
-    # Buscar cualquier columna que contenga "DOCUMENTO"
-    col_documento = [c for c in df_all.columns if "DOCUMENTO" in c]
+            if pat_inicio.match(line):
+                if buffer:
+                    registros.append(normalize_whitespace(buffer))
+                buffer = line
+            else:
+                buffer += " " + line  # unir toda línea que no empieza con voucher
 
-    if len(col_documento) == 0:
-        raise ValueError(f"No se detectó columna DOCUMENTO en: {list(df_all.columns)}")
+        if buffer:
+            registros.append(normalize_whitespace(buffer))
+        return registros
 
-    # Renombrar la columna encontrada a un nombre estándar
-    df_all = df_all.rename(columns={col_documento[0]: "DOCUMENTO"})
+    def extract_numeric_values_after_date(text: str):
+        """Extrae todos los valores numéricos después de la fecha en la línea."""
+        t = re.sub(r"[^\d\.,\-]+", " ", text)
+        toks = [x for x in t.split() if x.strip() != ""]
+        return [tk for tk in toks if re.search(r"\d", tk)]
 
-#    # Limpiar columnas no válidas
-#    df_all = df_all.loc[:, ~df_all.columns.isna()]
-#    df_all.columns = df_all.columns.astype(str).str.strip()
+    # ------------------------
+    # Parsers por tipo de VOUCHER
+    # ------------------------
 
-    # =====================================================
-    # 4. Limpieza de Remittance
-    # =====================================================
+    def parse_DEC(line, voucher):
+        """Parsea registros tipo DEC, incluyendo especiales 'DTO POR ESCALA VOLU'."""
+        line = normalize_whitespace(line)
+        mfecha = pat_fecha.search(line)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
 
-    # Tipos válidos de VOUCHER para Cencosud
-    filter_values = [
-        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL'
+        pre_date = line[len(voucher):mfecha.start()].strip()
+        post_date = line[mfecha.end():].strip()
+
+        prefix = "DTO POR ESCALA VOLU"
+        if pre_date.startswith(prefix):
+            descripcion = prefix
+            rest = pre_date[len(prefix):].strip()
+            # Capturar documento DEC seguido de todo lo que queda como tienda
+            mdoc = re.match(r"(\d{4}-\d{7,20})(.*)", rest)
+            if mdoc:
+                documento = mdoc.group(1)
+                tienda = normalize_whitespace(mdoc.group(2))
+            else:
+                documento = ""
+                tienda = rest
+        else:
+            # Caso genérico DEC
+            mdoc = pat_documento_dec.search(pre_date)
+            if mdoc:
+                documento = mdoc.group(1)
+                descripcion = normalize_whitespace(pre_date[:mdoc.start()])
+                tienda = normalize_whitespace(pre_date[mdoc.end():])
+            else:
+                documento = ""
+                descripcion = pre_date
+                tienda = ""
+
+        # Extraer valores numéricos después de la fecha
+        nums = extract_numeric_values_after_date(post_date)
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
+
+        # Detectar sección dentro de DESCRIPCION o TIENDA
+        seccion = ""
+        for sec in SECCIONES:
+            if sec in descripcion:
+                seccion = sec
+                descripcion = descripcion.replace(sec, "").strip()
+                break
+            elif sec in tienda:
+                seccion = sec
+                tienda = tienda.replace(sec, "").strip()
+                break
+
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": documento,
+            "TIENDA": tienda,
+            "SECCION": seccion.upper(),
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
+
+    def parse_PMP(line, voucher):
+        """Parsea vouchers tipo LTG y FPM."""
+        m = pat_documento_pmp.search(line)
+        if not m:
+            return None
+        documento = m.group(1)
+        doc_start, doc_end = m.start(), m.end()
+        descripcion = normalize_whitespace(line[len(voucher):doc_start])
+
+        tail = line[doc_end:].strip()
+        tokens_tail = tail.split()
+        idx_sec = None
+        for i, t in enumerate(tokens_tail):
+            if t.upper() in SECCIONES:
+                idx_sec = i
+                break
+
+        if idx_sec is None:
+            mfecha = pat_fecha.search(tail)
+            if not mfecha:
+                return None
+            fecha = mfecha.group(0)
+            before_date = tail.split(fecha, 1)[0].strip()
+            btoks = before_date.split()
+            if btoks and btoks[-1].upper() in SECCIONES:
+                seccion = btoks[-1]
+                tienda = " ".join(btoks[:-1]).strip()
+            else:
+                tienda = before_date
+                seccion = ""
+        else:
+            tienda = " ".join(tokens_tail[:idx_sec]).strip()
+            seccion = tokens_tail[idx_sec]
+
+        mfecha = pat_fecha.search(tail)
+        fecha = mfecha.group(0)
+
+        nums = extract_numeric_values_after_date(tail.split(fecha,1)[1])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
+
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": documento,
+            "TIENDA": tienda,
+            "SECCION": seccion,
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
+
+    def parse_FS(line, voucher):
+        """Parsea vouchers tipo FS."""
+        m = pat_documento_fs_pair.search(line)
+        if not m:
+            return None
+        documento = f"{m.group(1)} {m.group(2)}"
+        doc_start = m.start()
+        descripcion = normalize_whitespace(line[len(voucher):doc_start])
+
+        tail = line[m.end():].strip()
+        mfecha = pat_fecha.search(tail)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
+        before_date = tail.split(fecha,1)[0].strip()
+
+        adm_idx = re.search(r"\bADM\.", before_date, flags=re.IGNORECASE)
+        tienda = before_date[adm_idx.start():].strip() if adm_idx else before_date
+
+        nums = extract_numeric_values_after_date(tail.split(fecha,1)[1])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
+
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": documento,
+            "TIENDA": tienda,
+            "SECCION": "",
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
+
+    def parse_CH(line, voucher):
+        """Parsea vouchers tipo CH o registros con sección fija (RPL, DCA, etc.)."""
+        mfecha = pat_fecha.search(line)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
+        pre_date = line[len(voucher):mfecha.start()].strip()
+        adm_idx = re.search(r"\bADM\.", pre_date, flags=re.IGNORECASE)
+        if adm_idx:
+            descripcion = normalize_whitespace(pre_date[:adm_idx.start()])
+            tienda = pre_date[adm_idx.start():].strip()
+        else:
+            descripcion = pre_date
+            tienda = ""
+
+        # Extraer valores numéricos
+        nums = extract_numeric_values_after_date(line[mfecha.end():])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
+
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": "",
+            "TIENDA": tienda,
+            "SECCION": "",
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
+
+    def parse_generic(line, voucher):
+        """Intento de parseo genérico si no entra en los tipos anteriores."""
+        for fn in (parse_DEC, parse_PMP, parse_FS, parse_CH):
+            r = fn(line, voucher)
+            if r:
+                return r
+        # Fallback
+        mfecha = pat_fecha.search(line)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
+        descripcion = normalize_whitespace(line[len(voucher):mfecha.start()])
+        nums = extract_numeric_values_after_date(line[mfecha.end():])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": "",
+            "TIENDA": "",
+            "SECCION": "",
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
+
+    # -----------------------
+    # Dispatcher principal
+    # -----------------------
+    def parse_record(line: str):
+        line = normalize_whitespace(line)
+        m_start = re.match(rf"^{VOUCHERS}\b", line, flags=re.IGNORECASE)
+        if not m_start:
+            return None
+        voucher = m_start.group(1).upper()
+
+        if voucher in {"DCA", "DCF", "DND", "DAV", "DCC", "RPL"}:
+            return parse_CH(line, voucher)  # sección fija
+        if voucher == "DEC":
+            return parse_DEC(line, voucher)
+        if voucher in {"LTG", "FPM"}:
+            return parse_PMP(line, voucher)
+        if voucher == "FS":
+            return parse_FS(line, voucher)
+        if voucher == "CH":
+            return parse_CH(line, voucher)
+
+        return parse_generic(line, voucher)
+
+    # ------------------------
+    # Lectura y parseo PDF
+    # ------------------------
+    records = []
+    with pdfplumber.open(rutas["remittance"]) as pdf:
+        for page in pdf.pages:
+            txt = page.extract_text()
+            if not txt:
+                continue
+            lines = txt.split("\n")
+            # Saltar encabezado
+            for i, l in enumerate(lines):
+                if l.strip().startswith("VOUCHER"):
+                    lines = lines[i+1:]
+                    break
+            merged = merge_lines(lines)
+            for rec_line in merged:
+                parsed = parse_record(rec_line)
+                if parsed:
+                    records.append(parsed)
+
+    # ------------------------
+    # Crear DataFrame
+    # ------------------------
+    cols = [
+        "VOUCHER","DESCRIPCION","DOCUMENTO","TIENDA","SECCION",
+        "F. REGISTRO","VALOR","IVA","RET. FUENTE","RET. IVA",
+        "RET. ICA","OTROS IMP.","VALOR PAG","DOC.SOPORTE"
     ]
+    df = pd.DataFrame(records)
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
+    df = df[cols]
 
-    # Filtrar filas por la primera columna (la del tipo de voucher)
-    remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
-    
-    # Tranformamos a numerico el dato "VALOR PAG"
-    remittance["VALOR PAG"] = (
-        remittance["VALOR PAG"]
-        .astype(str)
-        .str.replace(".", "", regex=False)   # quitar puntos de miles
-        .str.replace(",", ".", regex=False)  # convertir coma a decimal
-    )
-    
-    remittance["VALOR PAG"] = pd.to_numeric(remittance["VALOR PAG"], errors="coerce")
+    # ------------------------
+    # Separar DOCUMENTO + TIENDA pegados (especial DEC)
+    # ------------------------
+    pat_merged = re.compile(r"^(\d{4}-\d{7,20})([A-ZÁÉÍÓÚÑ0-9 .-]+)$", flags=re.IGNORECASE)
+    for idx, row in df.iterrows():
+        doc = str(row["DOCUMENTO"]).strip()
+        tienda = str(row["TIENDA"]).strip()
+        if not doc and tienda:
+            m = pat_merged.match(tienda.replace(" ", ""))
+            if m:
+                df.at[idx, "DOCUMENTO"] = m.group(1)
+                df.at[idx, "TIENDA"] = normalize_whitespace(m.group(2))
 
-    # Parche necesario, dejar. Por lectura de pdf se puede movel el valor de la columna "VALOR PAG" a "DOC.SOPORTE".
-    # Esta linea reemplaza los valores de "VALOR PAG" cuando es 0 por el valor de "DOC.SOPORTE"
-    remittance.loc[remittance["VALOR PAG"] == 0, "VALOR PAG"] = remittance["DOC.SOPORTE"]
+    # ------------------------
+    # Extraer SECCION pegada en DESCRIPCION o TIENDA
+    # ------------------------
+    secciones_sorted = sorted(SECCIONES, key=lambda s: -len(s))
 
-    # Ordenamiento personalizado
-    def sort_key(val):
-        if val == "VOUCHER": return "0"
-        if val == "FPM":     return "1"
-        return "2" + str(val)
+    def extract_and_move_section_from_text(text: str):
+        if not isinstance(text, str):
+            return text, ""
+        txt_low = text.lower()
+        for sec in secciones_sorted:
+            sec_low = sec.lower()
+            idx = txt_low.rfind(sec_low)
+            if idx != -1:
+                seccion = text[idx:idx+len(sec)]
+                new_text = re.sub(r"\s+", " ", (text[:idx] + text[idx+len(sec):]).strip())
+                return new_text, seccion.upper()
+        return text, ""
 
-    remittance["sort_order"] = remittance[remittance.columns[0]].apply(sort_key)
+    def fix_row_move_section(row):
+        desc = str(row.get("DESCRIPCION", "")).strip()
+        tienda = str(row.get("TIENDA", "")).strip()
+        seccion_actual = str(row.get("SECCION", "")).strip()
 
-    remittance = (
-        remittance.sort_values(by="sort_order")
-        .drop(columns="sort_order")
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
+        new_desc, found = extract_and_move_section_from_text(desc)
+        if found:
+            row["DESCRIPCION"] = new_desc
+            row["SECCION"] = found
+            tienda = tienda.replace(found, "").strip()
+            row["TIENDA"] = re.sub(r"\s+", " ", tienda)
+            return row
 
+        new_tienda, found = extract_and_move_section_from_text(tienda)
+        if found:
+            row["TIENDA"] = new_tienda
+            row["SECCION"] = found
+            return row
 
+        row["DESCRIPCION"] = re.sub(r"\s+", " ", desc)
+        row["TIENDA"] = re.sub(r"\s+", " ", tienda)
+        row["SECCION"] = seccion_actual
+        return row
+
+    df = df.apply(fix_row_move_section, axis=1)
+
+    # Validar SECCION
+    df["SECCION"] = df["SECCION"].fillna("").str.upper().str.strip()
+    df.loc[~df["SECCION"].isin(SECCIONES), "SECCION"] = ""
+    df["TIENDA"] = df["TIENDA"].astype(str).str.strip()
+
+    # PARCHES
+    # Ajuste nombre de columnas:
+    df = df.rename(columns={
+        "VALOR": "VALOR FAC.",
+        "IVA": "IVA FAC."
+    })
+    # Parche para casos puntuales por no poder leer registros multi-línea
+    for idx, row in df.iterrows():
+        # DESCRIPCION específica para RPL
+        if row["VOUCHER"] == "RPL" and row["DESCRIPCION"].strip().upper() == "DESCUENTO":
+            df.at[idx, "DESCRIPCION"] = "DESCUENTO COMERCIAL"
+
+        # Ajuste de SECCION
+        if row["SECCION"].strip().upper() == "DROGUE":
+            df.at[idx, "SECCION"] = "DROGUER"
+
+        # Ajustes específicos de TIENDA
+        tienda_val = row["TIENDA"].strip().upper()
+        if tienda_val == "PLAT - CROSS":
+            df.at[idx, "TIENDA"] = "PLAT - CROSS DOCKIN"
+        elif tienda_val == "PLAT - PLAT":
+            df.at[idx, "TIENDA"] = "PLAT - PLAT BUCARAM"
+        elif tienda_val == "PLAT - CROSSD":
+            df.at[idx, "TIENDA"] = "PLAT - CROSSD AVERI"
+            
+    # Creacion de remittance
+    remittance = df
     # 2.1 Guardar Remittance en buffer en memoria
     remittance_buffer = io.BytesIO()
     with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
@@ -198,16 +515,21 @@ def procesar():
     # Renombramos columna "Referencia / Factura" "FACTURA PROVEEDOR" por "Factura"
     remittance.loc[remittance["Tipo de Documento"] == "FACTURA PROVEEDOR", "Tipo de Documento"] = "Factura"
 
-#    # Limpieza de importes
+    # Extraer números de forma robusta
     remittance["Importe de Remittance"] = (
-        pd.to_numeric(
-            remittance["Importe de Remittance"].astype(str)
+        remittance["Importe de Remittance"]
+            .astype(str)
             .str.replace(".", "", regex=False)
             .str.replace(",", "", regex=False)
-            .str.extract(r"([-\d]+)")[0],
-            errors="coerce"
-        )
+            .str.extract(r"([-\d]+)", expand=False)  # expand=False → devuelve Series, NO DataFrame
     )
+
+    # Convertir a numérico sin romper
+    remittance["Importe de Remittance"] = pd.to_numeric(
+        remittance["Importe de Remittance"],
+        errors="coerce"
+    )
+
     # Quitamos filas "Importe de Remittance" nulas
     remittance = remittance[remittance["Importe de Remittance"].notna()]
     remittance["Importe de Remittance"] *= -1  # Ajustar signo
@@ -216,7 +538,7 @@ def procesar():
     for col in ["Descuento","Motivo del descuento","Comentarios"]:
         if col not in remittance.columns:
             remittance[col] = ""
-
+            
     # =====================================================
     # 5. Manejo de Reglas y CARDs
     # =====================================================
@@ -229,7 +551,7 @@ def procesar():
     remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "Descuento"] + " " + remittance.loc[mask, "Referencia / Factura"]
 
     # Grupo de vouchers: DAT, DAV, DCA, DCC, DCF, DND, DPC, RPC, DCR, RPL
-    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL"]
+    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL", "DEC"]
     mask = remittance["VOUCHER"].isin(grupo)
     agrupados = (
         remittance.loc[mask]
@@ -287,7 +609,7 @@ def procesar():
     # =====================================================
     # 9. Renombrado y limpieza de columnas
     # =====================================================
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
     
     # =====================================================
     # 10. Merge Remittance + FBL5N por "Referencia / Factura"
@@ -315,6 +637,27 @@ def procesar():
     # Por defecto, 'Pago Neto' = 'Importe de factura'
     
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+    
+    # Normalizar columna REFERENCIA / FACTURA
+    # 1. Reemplaza valores no escalares por string seguro
+    hrc_template["Referencia / Factura"] = (
+        hrc_template["Referencia / Factura"]
+            .apply(lambda x: "" if x is None else str(x))  # convierte todo a texto
+            .str.replace(r"[\[\]\(\)\{\}]", "", regex=True)  # remueve secuencias tipo lista/array
+            .str.replace(r"\s+", " ", regex=True)           # normaliza espacios
+            .str.strip()
+    )
+    # Eliminar facturas mal cargadas
+    # (luego de normalizar y asegurar scalar strings)
+    hrc_template = (
+        hrc_template[
+            ~(
+                (hrc_template["Tipo de Documento"] == "Factura") &
+                (hrc_template["Referencia / Factura"].str.len() != 10)
+            )
+        ]
+        .reset_index(drop=True)
+    )
 
     # =====================================================
     # 14. Definición de columnas finales para el template
@@ -334,10 +677,6 @@ def procesar():
     # =====================================================
     # 15. Preparación de parámetros y extracción de datos dinámicos (para exportar_template)
     # =====================================================
-    # Extraemos id_cliente y nombre_cliente desde el primer registro de FBL5N
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
     
     # Exportamos template final, aplicando formato y copiando hoja de Remittance
     exportar_template(

@@ -1,0 +1,422 @@
+# =====================================================
+# 0. Importación de librerías y módulos utilitarios
+# =====================================================
+
+import os       # Manejo de rutas y directorios del sistema operativo
+import sys      # Detección de ejecución empaquetada y manipulación de rutas del intérprete
+import re       # Expresiones regulares (búsqueda y limpieza de texto)
+import io        # Manejo de flujos de datos en memoria (buffers, streams)
+import warnings # Control de advertencias del sistema y librerías externas
+
+import numpy as np  # Operaciones numéricas y lógicas (np.where, np.select, etc.)
+import pandas as pd  # Manipulación y análisis de datos tabulares
+import camelot   # Extracción de tablas desde archivos PDF
+from PyPDF2 import PdfReader  # Lectura y procesamiento de archivos PDF
+from openpyxl import load_workbook  # Lectura de archivos Excel (.xlsx)
+
+# Buscamos las funciones en la carpeta Main
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))  # Sube desde /Pruebas/clientes/Colombia a /Raiz
+# sys.path.append(project_root)
+# from Main.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+
+from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+
+# Configuración de advertencias
+warnings.filterwarnings("ignore", category=UserWarning, module="camelot") # Suprime advertencias generadas por Camelot (usualmente por manejo de PDFs)
+
+
+# =====================================================
+# 1. Localización dinámica de la carpeta raíz del proyecto
+# =====================================================
+def _project_root():
+    """
+    Obtiene la ruta base del proyecto sin importar el entorno de ejecución.
+
+    - Si el código se ejecuta empaquetado (por ejemplo, como .app o .exe),
+      sube desde la ruta del ejecutable hasta la carpeta que contiene el proyecto.
+    - Si se ejecuta como script Python normal, sube dos niveles desde
+      el archivo actual (../..), asumiendo la estructura estándar del proyecto.
+
+    Devuelve:
+        str: Ruta absoluta a la carpeta raíz del proyecto.
+    """
+    if getattr(sys, "frozen", False):
+        macos_dir = os.path.dirname(sys.executable)
+        contents_dir = os.path.dirname(macos_dir)
+        app_bundle = os.path.dirname(contents_dir)
+        return os.path.dirname(app_bundle)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+# =====================================================
+# 2. Función principal del proceso (procesar)
+# =====================================================
+def procesar():
+    """
+    Orquestador principal para Cencosud
+    """
+    root = _project_root()
+
+    # --- Rutas de entrada/salida ---
+    rutas = {
+        "remittance": os.path.join(root, "Archivos", "Remittance", "Colombia", "Remittance_Cenco.pdf"),  # Cencosud
+#        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N.xlsx"),
+        "fbl5n": os.path.join(root, "Archivos", "Cartera", "FBL5N_Cenco.xlsx"),
+        "salida": os.path.join(root, "Archivos", "Template", "Colombia", "Template_HRC_Cenco.xlsx")
+    }
+    # Colocar el Customer ID del cliente
+    customer_id = 10267301
+
+    # =====================================================
+    # 1. Lectura de Remitente
+    # =====================================================
+    # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
+    
+    reader = PdfReader(rutas["remittance"])
+    num_pages = len(reader.pages)
+    all_pages = set(range(1, num_pages + 1))
+
+    column_positions = "50,150,260,340,420,500,580,650,720,790,860,930,1000,1080"
+
+    tables_stream = camelot.read_pdf(
+        rutas["remittance"],
+        pages='all',
+        flavor='stream',
+        strip_text='\n',
+        columns=[column_positions] * 50,   # <<< clave: repetir para todas las tablas posibles
+        row_tol=12,
+        column_tol=10,
+    )
+    
+    
+    tables_stream = camelot.read_pdf(
+        rutas["remittance"], pages='all', flavor='stream', strip_text='\n'
+    )
+    stream_pages = set(int(t.page) for t in tables_stream)
+    missing_pages = all_pages - stream_pages
+
+    tables_lattice = []
+    if missing_pages:
+        missing_pages_str = ",".join(str(p) for p in missing_pages)
+        tables_lattice = camelot.read_pdf(
+            rutas["remittance"], pages=missing_pages_str, flavor='lattice', strip_text='\n'
+        )
+
+    # Concatenar todas las tablas detectadas
+    df_all = pd.concat([t.df for t in list(tables_stream) + list(tables_lattice)], ignore_index=True)
+
+    # =====================================================
+    # Detectar fila de ENCABEZADO real (DOCUMENTO o VOUCHER)
+    # =====================================================
+
+    header_idx_candidates = df_all.apply(
+        lambda row: row.astype(str).str.contains("DOCUMENTO", case=False).any()
+                     or row.astype(str).str.contains("VOUCHER", case=False).any(),
+        axis=1
+    )
+
+    if not header_idx_candidates.any():
+        raise ValueError(
+            "No se encontró encabezado válido (ni 'DOCUMENTO' ni 'VOUCHER')\n"
+            f"Primeras filas detectadas:\n{df_all.head()}"
+        )
+
+    header_row_idx = header_idx_candidates.idxmax()
+    
+    # Convertimos esa fila en encabezado real
+    df_all.columns = df_all.iloc[header_row_idx]
+    df_all = df_all.drop(index=list(range(0, header_row_idx + 1))).reset_index(drop=True)
+    
+    # ---- LIMPIAR COLUMNAS NO VÁLIDAS (ANTES DE NORMALIZAR) ----
+    df_all = df_all.loc[:, ~df_all.columns.isna()]
+
+    # ---- NORMALIZAR NOMBRES DE COLUMNAS ----
+    df_all.columns = (
+        df_all.columns.astype(str)
+        .str.replace(r"[\n\r]+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        .str.upper()          # Todo en mayúsculas para emparejar
+    )
+
+    # ---- RENOMBRAR COLUMNA DOCUMENTO SIN IMPORTAR COMO SALGA ----
+    # Buscar cualquier columna que contenga "DOCUMENTO"
+    col_documento = [c for c in df_all.columns if "DOCUMENTO" in c]
+
+    if len(col_documento) == 0:
+        raise ValueError(f"No se detectó columna DOCUMENTO en: {list(df_all.columns)}")
+
+    # Renombrar la columna encontrada a un nombre estándar
+    df_all = df_all.rename(columns={col_documento[0]: "DOCUMENTO"})
+
+    # =====================================================
+    # 4. Limpieza de Remittance
+    # =====================================================
+
+    # Tipos válidos de VOUCHER para Cencosud
+    filter_values = [
+        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL','DEC'
+    ]
+
+    # Filtrar filas por la primera columna (la del tipo de voucher)
+    remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
+    
+    # =====================================================
+    # Fix para registros DEC que vienen desfasados (vectorizado)
+    # =====================================================
+    SECCIONES_VALIDAS = ["DROGUE", "PERFUME", "RANCHO", "PLATOS", "ALMAGRAN", "CROSS", "CROSSD"]
+
+    # Solo filas DEC
+    mask_dec = remittance["VOUCHER"] == "DEC"
+    dec_df = remittance.loc[mask_dec].copy()
+
+    # Asegurar columnas existentes
+    for col in ["SECCION", "TIENDA", "DESCRIPCION", "VALOR PAG", "DOC.SOPORTE", "OTROS IMP."]:
+        if col not in dec_df.columns:
+            dec_df[col] = 0 if col in ["VALOR PAG", "DOC.SOPORTE", "OTROS IMP."] else ""
+
+    # Convertir numéricas
+    for col in ["VALOR PAG", "DOC.SOPORTE", "OTROS IMP."]:
+        dec_df[col] = pd.to_numeric(dec_df[col], errors="coerce").fillna(0)
+
+    # 1) Extraer DOCUMENTO y resto
+    def extraer_doc(row):
+        m = re.match(r"^(\d{4}-\d{10})\s+(.*)$", str(row["DOCUMENTO"]).strip())
+        if not m:
+            return pd.Series({"DOCUMENTO": row["DOCUMENTO"], "TIENDA": "", "SECCION": ""})
+        doc_real, resto = m.groups()
+        partes = resto.split()
+        if partes[-1].upper() in SECCIONES_VALIDAS:
+            seccion = partes[-1]
+            tienda = " ".join(partes[:-1])
+        else:
+            seccion = ""
+            tienda = resto
+        return pd.Series({"DOCUMENTO": doc_real, "TIENDA": tienda, "SECCION": seccion})
+
+    dec_df[["DOCUMENTO", "TIENDA", "SECCION"]] = dec_df.apply(extraer_doc, axis=1)
+    dec_df["DESCRIPCION"] = "DTO POR ESCALA VOLU"
+
+    # 2) Intercambio condicional: si OTROS IMP. != 0, moverlo a VALOR PAG y VALOR PAG actual a DOC.SOPORTE
+    mask_intercambio = dec_df["OTROS IMP."] != 0
+    dec_df.loc[mask_intercambio, "DOC.SOPORTE"] = dec_df.loc[mask_intercambio, "VALOR PAG"]
+    dec_df.loc[mask_intercambio, "VALOR PAG"] = dec_df.loc[mask_intercambio, "OTROS IMP."]
+
+    # 3) Reasignar de vuelta al remittance
+    remittance.loc[mask_dec, dec_df.columns] = dec_df
+
+    
+    # Tranformamos a numerico el dato "VALOR PAG"
+    remittance["VALOR PAG"] = (
+        remittance["VALOR PAG"]
+        .astype(str)
+        .str.replace(".", "", regex=False)   # quitar puntos de miles
+        .str.replace(",", ".", regex=False)  # convertir coma a decimal
+    )
+    
+    remittance["VALOR PAG"] = pd.to_numeric(remittance["VALOR PAG"], errors="coerce")
+
+    # En algunos casos, el valor real puede estar en "DOC.SOPORTE" en lugar de "VALOR PAG".
+    # Esta línea asegura que "VALOR PAG" tome el valor que no sea cero entre ambas columnas.
+    remittance["VALOR PAG"] = np.where(
+        remittance["VALOR PAG"] != 0,
+        remittance["VALOR PAG"],  # si VALOR PAG ya tiene valor, lo dejamos
+        remittance["DOC.SOPORTE"]  # si VALOR PAG es 0, usamos DOC.SOPORTE
+    )
+
+    # Ordenamiento personalizado
+    def sort_key(val):
+        if val == "VOUCHER": return "0"
+        if val == "FPM":     return "1"
+        return "2" + str(val)
+
+    remittance["sort_order"] = remittance[remittance.columns[0]].apply(sort_key)
+
+    remittance = (
+        remittance.sort_values(by="sort_order")
+        .drop(columns="sort_order")
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
+
+    # 2.1 Guardar Remittance en buffer en memoria
+    remittance_buffer = io.BytesIO()
+    with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
+        remittance.to_excel(writer, index=False)
+    remittance_buffer.seek(0)
+
+    
+    # Renombrar columnas de interés
+    remittance = remittance.rename(columns={
+        "DESCRIPCION": "Tipo de Documento",
+        "DOCUMENTO": "Referencia / Factura",
+        "VALOR PAG": "Importe de Remittance"
+    })
+    
+    # Renombramos columna "Referencia / Factura" "FACTURA PROVEEDOR" por "Factura"
+    remittance.loc[remittance["Tipo de Documento"] == "FACTURA PROVEEDOR", "Tipo de Documento"] = "Factura"
+
+#    # Limpieza de importes
+    remittance["Importe de Remittance"] = (
+        pd.to_numeric(
+            remittance["Importe de Remittance"].astype(str)
+            .str.replace(".", "", regex=False)
+            .str.replace(",", "", regex=False)
+            .str.extract(r"([-\d]+)")[0],
+            errors="coerce"
+        )
+    )
+    # Quitamos filas "Importe de Remittance" nulas
+    remittance = remittance[remittance["Importe de Remittance"].notna()]
+    remittance["Importe de Remittance"] *= -1  # Ajustar signo
+
+    # Asegurar columnas de descuento
+    for col in ["Descuento","Motivo del descuento","Comentarios"]:
+        if col not in remittance.columns:
+            remittance[col] = ""
+
+    # =====================================================
+    # 5. Manejo de Reglas y CARDs
+    # =====================================================
+    # Aquí se aplican todas las reglas de tipo de documento según VOUCHER
+    # LTG
+    mask = remittance["VOUCHER"] == "LTG"
+    remittance.loc[mask, "Tipo de Documento"] = "Descuentos Clientes"
+    remittance.loc[mask, "Descuento"] = "Rechazo"
+    remittance.loc[mask, "Motivo del descuento"] = "551"
+    remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "Descuento"] + " " + remittance.loc[mask, "Referencia / Factura"]
+
+    # Grupo de vouchers: DAT, DAV, DCA, DCC, DCF, DND, DPC, RPC, DCR, RPL
+    grupo = ["DAT","DAV","DCA","DCC","DCF","DND","DPC","RPC","DCR", "RPL", "DEC"]
+    mask = remittance["VOUCHER"].isin(grupo)
+    agrupados = (
+        remittance.loc[mask]
+        .groupby(["VOUCHER", "Tipo de Documento", "SECCION", "DOC.SOPORTE"], as_index=False)
+        .agg({
+            "Referencia / Factura": lambda x: " ".join(x.dropna().astype(str)),
+            "Importe de Remittance": "sum"
+        })
+    )
+    agrupados["Referencia / Factura"] = agrupados["Tipo de Documento"]
+    agrupados["Tipo de Documento"] = "Descuentos Clientes"
+    agrupados["Descuento"] = agrupados["SECCION"]
+    agrupados["Motivo del descuento"] = "987"
+    # Paso 1: limpiar DOC.SOPORTE y asegurar que sea string
+    agrupados["DOC.SOPORTE"] = agrupados["DOC.SOPORTE"].fillna("").astype(str).str.replace(".", "", regex=False)
+    # Paso 2: crear Comentarios sin intentar convertir a int
+    agrupados["Comentarios"] = (
+        agrupados["VOUCHER"].astype(str) + " DSCTO " +
+        agrupados["DOC.SOPORTE"] + " " +
+        agrupados["Referencia / Factura"].fillna("").astype(str) + " " +
+        agrupados["SECCION"].fillna("").astype(str)
+    )
+
+    remittance = pd.concat([remittance.loc[~mask].copy(), agrupados], ignore_index=True)
+
+    # FS
+    mask = remittance["VOUCHER"] == "FS"
+    remittance.loc[mask, "Tipo de Documento"] = "Descuentos Clientes"
+    remittance.loc[mask, "Descuento"] = "FACT PROVEED"
+    remittance.loc[mask, "Motivo del descuento"] = "CSB"
+    remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "Referencia / Factura"]
+
+    # DEV
+    mask = remittance["VOUCHER"] == "DEV"
+    remittance.loc[mask, "Referencia / Factura"]  = remittance.loc[mask, "Tipo de Documento"]
+    remittance.loc[mask, "Descuento"] = remittance.loc[mask, "Tipo de Documento"]
+    remittance.loc[mask, "Tipo de Documento"] = "Descuentos Clientes"
+    remittance.loc[mask, "Motivo del descuento"] = "522"
+    remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "VOUCHER"] + " " + remittance.loc[mask, "Referencia / Factura"] + " " + remittance.loc[mask, "SECCION"]
+
+    # CH (MENORES VALORES)
+    mask = remittance["VOUCHER"] == "CH"
+    remittance.loc[mask, "Referencia / Factura"] = remittance.loc[mask, "Tipo de Documento"]
+    remittance.loc[mask, "Descuento"] = remittance.loc[mask, "Tipo de Documento"]
+    remittance.loc[mask, "Tipo de Documento"] = "Descuentos Clientes"
+    remittance.loc[mask, "Motivo del descuento"] = np.where(
+        (remittance.loc[mask, "Importe de Remittance"].abs() >= 20000), "987",
+        np.where(remittance.loc[mask, "Importe de Remittance"].between(-20000,0, inclusive="neither"), "WOB","384")
+    )
+    remittance.loc[mask, "Comentarios"] = "MENORES VALORES"
+    
+    # =====================================================
+    # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
+    # =====================================================
+    
+    remittance = procesar_descuentos_y_comentarios(remittance)
+
+    # =====================================================
+    # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)
+    # =====================================================
+    # =====================================================
+    # 8. Filtro de la cartera del cliente
+    # =====================================================
+    # =====================================================
+    # 9. Renombrado y limpieza de columnas
+    # =====================================================
+    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    
+    # =====================================================
+    # 10. Merge Remittance + FBL5N por "Referencia / Factura"
+    # =====================================================
+    # Se realiza un merge tipo "left" sobre 'Referencia / Factura' para mantener todas
+    # las filas de Remittance y añadir información de FBL5N cuando exista coincidencia
+    hrc_template = merge_remittance_cartera(remittance, FBL5N)
+    
+
+    # =====================================================
+    # 11. Cálculo de diferencias
+    # =====================================================
+    # Se calcula la diferencia entre 'Importe de factura' y 'Importe de Remittance'
+    # La lógica centralizada se encuentra en la función procesar_diferencias()
+    hrc_template = procesar_diferencias(hrc_template)
+    
+    # =====================================================
+    # 12. Agregamos registros NRO
+    # =====================================================
+    hrc_template = procesamiento_nro(hrc_template, FBL5N)
+    
+    # =====================================================
+    # 13. Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
+    # =====================================================
+    # Por defecto, 'Pago Neto' = 'Importe de factura'
+    
+    hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+
+    # =====================================================
+    # 14. Definición de columnas finales para el template
+    # =====================================================
+    columnas_finales = [
+        "Tipo de Documento",
+        "Referencia / Factura",
+        "Importe de factura",
+        "Descuento",
+        "Motivo del descuento",
+        "Pago Neto",
+        "Comentarios"
+    ]
+    # Mantener solo las columnas relevantes en el orden esperado por el template
+    hrc_template = hrc_template[columnas_finales]
+
+    # =====================================================
+    # 15. Preparación de parámetros y extracción de datos dinámicos (para exportar_template)
+    # =====================================================
+    # Extraemos id_cliente y nombre_cliente desde el primer registro de FBL5N
+    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
+    id_cliente = fbl5n_meta["Customer"].iloc[0] if not fbl5n_meta.empty else ""
+    nombre_cliente = fbl5n_meta["Name 1"].iloc[0] if not fbl5n_meta.empty else ""
+    
+    # Exportamos template final, aplicando formato y copiando hoja de Remittance
+    exportar_template(
+        hrc_template=hrc_template, 
+        suma_remittance = remittance["Importe de Remittance"].sum(),
+        numero_orden="",   # FALTA: parametrizar
+        id_cliente=id_cliente,
+        nombre_cliente=nombre_cliente,
+        ruta_remittance=remittance_buffer,  # buffer en memoria
+        ruta_salida=rutas["salida"]
+    )
+    
+    # Devolución del template final
+    return hrc_template
