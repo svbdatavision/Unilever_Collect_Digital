@@ -176,7 +176,7 @@ def procesar():
             "DOC.SOPORTE": doc_soporte
         }
 
-    def parse_PMP(line, voucher):
+    def parse_LTG_FPM(line, voucher):
         """Parsea vouchers tipo LTG y FPM."""
         m = pat_documento_pmp.search(line)
         if not m:
@@ -279,7 +279,7 @@ def procesar():
         }
 
     def parse_CH(line, voucher):
-        """Parsea vouchers tipo CH o registros con sección fija (RPL, DCA, etc.)."""
+        """Parsea vouchers tipo CH o registros con sección fija ("DCA", "DCF", "DND", "DAV", "DCC", "RPL")."""
         mfecha = pat_fecha.search(line)
         if not mfecha:
             return None
@@ -319,7 +319,7 @@ def procesar():
 
     def parse_generic(line, voucher):
         """Intento de parseo genérico si no entra en los tipos anteriores."""
-        for fn in (parse_DEC, parse_PMP, parse_FS, parse_CH):
+        for fn in (parse_DEC, parse_LTG_FPM, parse_FS, parse_CH):
             r = fn(line, voucher)
             if r:
                 return r
@@ -366,7 +366,7 @@ def procesar():
         if voucher == "DEC":
             return parse_DEC(line, voucher)
         if voucher in {"LTG", "FPM"}:
-            return parse_PMP(line, voucher)
+            return parse_LTG_FPM(line, voucher)
         if voucher == "FS":
             return parse_FS(line, voucher)
         if voucher == "CH":
@@ -400,7 +400,7 @@ def procesar():
     # ------------------------
     cols = [
         "VOUCHER","DESCRIPCION","DOCUMENTO","TIENDA","SECCION",
-        "F. REGISTRO","VALOR","IVA","RET. FUENTE","RET. IVA",
+        "F. REGISTRO","VALOR FAC.","IVA FAC.","RET. FUENTE","RET. IVA",
         "RET. ICA","OTROS IMP.","VALOR PAG","DOC.SOPORTE"
     ]
     df = pd.DataFrame(records)
@@ -472,11 +472,6 @@ def procesar():
     df["TIENDA"] = df["TIENDA"].astype(str).str.strip()
 
     # PARCHES
-    # Ajuste nombre de columnas:
-    df = df.rename(columns={
-        "VALOR": "VALOR FAC.",
-        "IVA": "IVA FAC."
-    })
     # Parche para casos puntuales por no poder leer registros multi-línea
     for idx, row in df.iterrows():
         # DESCRIPCION específica para RPL

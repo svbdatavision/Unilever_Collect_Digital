@@ -61,504 +61,459 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # =====================================================
     # 1. Lectura de Remitente
     # =====================================================
-    # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
-    # LECTURA AUTOMÁTICA DEL PDF: DETECCIÓN DE COLUMNAS + CAMELOT
+    # ------------------------
+    # Configuración y patrones
+    # ------------------------
 
-    HEADERS_EXPECTED = [
-        "VOUCHER","DESCRIPCION","DOCUMENTO","TIENDA","F. REGISTRO","SECCION","VALOR",
-        "FAC. IVA","FAC. RET. FUENTE","RET. IVA","RET. ICA","OTROS IMP.","VALOR PAG","DOC.SOPORTE"
-    ]
+    # Vouchers reconocidos
+    VOUCHERS = r"(FS|CH|DEC|NC|ND|LTG|FPM|DCA|DCF|DND|DAV|DCC|RPL|DAT|DEV|DPC)"
+    pat_inicio = re.compile(rf"^{VOUCHERS}\b", flags=re.IGNORECASE)
 
-    def detect_header_positions(pdf_path, page_number=1, headers_expected=None):
-        """Devuelve dict {HEADER: x0} usando pdfplumber."""
-        if headers_expected is None:
-            headers_expected = HEADERS_EXPECTED
+    # Patrones para documentos específicos
+    pat_documento_dec = re.compile(r"\b(\d{4}-\d{7,20})\b")     # DEC
+    pat_documento_pmp = re.compile(r"\b(PMP\d{3,20})\b")        # PMP / LTG / FPM
+    pat_documento_fs_pair = re.compile(r"\b([A-Z0-9]{2,6})\s+(\d{5,12})\b")  # FS
+    pat_fecha = re.compile(r"\d{2}/\d{2}/\d{4}")                # Fecha
 
-        with pdfplumber.open(pdf_path) as pdf:
-            page = pdf.pages[page_number - 1]
-            words = page.extract_words(use_text_flow=True)
+    # Secciones posibles
+    SECCIONES = {"PERFUME", "DROGUE", "RANCHO", "PLATOS"}
 
-        words_u = [
-            (w['text'].strip().upper(), w)
-            for w in words if w.get('text') and w['text'].strip() != ""
-        ]
+    # -----------------------
+    # Funciones utilitarias
+    # -----------------------
 
-        header_positions = {}
+    def normalize_whitespace(s: str) -> str:
+        """Quita espacios extra y normaliza la cadena."""
+        return re.sub(r"\s+", " ", s).strip()
 
-        for header in headers_expected:
-            h = header.strip().upper()
+    def is_start_of_record(line: str) -> bool:
+        """Verifica si una línea comienza con un voucher reconocido."""
+        return bool(pat_inicio.match(line.strip()))
 
-            # 1) match exacto
-            candidates = [w for t, w in words_u if t == h]
+    def merge_lines(lines):
+        """
+        Une todas las líneas de un mismo registro:
+        - Si empieza con voucher → nuevo registro
+        - Si no, se agrega al registro actual
+        Esto asegura que multi-líneas en DESCRIPCION o TIENDA queden juntas.
+        """
+        registros = []
+        buffer = ""
 
-            # 2) match substring
-            if not candidates:
-                candidates = [w for t, w in words_u if h in t]
+        for raw in lines:
+            line = raw.strip()
+            if not line:
+                continue
 
-            # 3) match por primera palabra
-            if not candidates:
-                first = h.split()[0]
-                candidates = [w for t, w in words_u if t.startswith(first)]
-
-            if candidates:
-                chosen = sorted(candidates, key=lambda d: d['x0'])[0]
-                header_positions[h] = chosen['x0']
+            if pat_inicio.match(line):
+                if buffer:
+                    registros.append(normalize_whitespace(buffer))
+                buffer = line
             else:
-                header_positions[h] = None
+                buffer += " " + line  # unir toda línea que no empieza con voucher
 
-        return header_positions
+        if buffer:
+            registros.append(normalize_whitespace(buffer))
+        return registros
 
+    def extract_numeric_values_after_date(text: str):
+        """Extrae todos los valores numéricos después de la fecha en la línea."""
+        t = re.sub(r"[^\d\.,\-]+", " ", text)
+        toks = [x for x in t.split() if x.strip() != ""]
+        return [tk for tk in toks if re.search(r"\d", tk)]
 
-    def build_cuts_from_positions(header_positions):
-        x_list = [int(round(v)) for v in header_positions.values() if v is not None]
-        x_list = sorted(set(x_list))
+    # ------------------------
+    # Parsers por tipo de VOUCHER
+    # ------------------------
 
-        if len(x_list) < 6:
+    def parse_DEC(line, voucher):
+        """Parsea registros tipo DEC, incluyendo especiales 'DTO POR ESCALA VOLU'."""
+        line = normalize_whitespace(line)
+        mfecha = pat_fecha.search(line)
+        if not mfecha:
             return None
+        fecha = mfecha.group(0)
 
-        cuts = []
-        cuts.append(max(1, x_list[0] - 20))  # left margin
+        pre_date = line[len(voucher):mfecha.start()].strip()
+        post_date = line[mfecha.end():].strip()
 
-        for i in range(len(x_list) - 1):
-            mid = int(round((x_list[i] + x_list[i+1]) / 2))
-            cuts.append(mid)
-
-        cuts.append(int(round(x_list[-1] + 120)))  # right margin
-
-        return sorted(list(dict.fromkeys(cuts)))
-
-
-    def camelot_read_with_columns(pdf_path, columns_cuts):
-        """Llama a Camelot usando columnas detectadas y genera fallback."""
-        cols_str = ",".join(str(x) for x in columns_cuts) if columns_cuts else None
-        error = None
-
-        try:
-            if cols_str:
-                tables = camelot.read_pdf(
-                    pdf_path, pages='all', flavor='stream',
-                    strip_text='\n', columns=cols_str,
-                    row_tol=8, column_tol=6
-                )
+        prefix = "DTO POR ESCALA VOLU"
+        if pre_date.startswith(prefix):
+            descripcion = prefix
+            rest = pre_date[len(prefix):].strip()
+            # Capturar documento DEC seguido de todo lo que queda como tienda
+            mdoc = re.match(r"(\d{4}-\d{7,20})(.*)", rest)
+            if mdoc:
+                documento = mdoc.group(1)
+                tienda = normalize_whitespace(mdoc.group(2))
             else:
-                tables = camelot.read_pdf(
-                    pdf_path, pages='all', flavor='stream',
-                    strip_text='\n', row_tol=8, column_tol=6
-                )
-            return tables
-        except Exception:
-            error = traceback.format_exc()
-            print("\n⚠️ Error usando columnas detectadas — intentando fallback sin columnas…")
+                documento = ""
+                tienda = rest
+        else:
+            # Caso genérico DEC
+            mdoc = pat_documento_dec.search(pre_date)
+            if mdoc:
+                documento = mdoc.group(1)
+                descripcion = normalize_whitespace(pre_date[:mdoc.start()])
+                tienda = normalize_whitespace(pre_date[mdoc.end():])
+            else:
+                documento = ""
+                descripcion = pre_date
+                tienda = ""
 
-            try:
-                return camelot.read_pdf(pdf_path, pages='all', flavor='stream', strip_text='\n')
-            except Exception:
-                print(error)
-                print("\n❌ Fallback también falló.")
-                return []
+        # Extraer valores numéricos después de la fecha
+        nums = extract_numeric_values_after_date(post_date)
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
 
+        # Detectar sección dentro de DESCRIPCION o TIENDA
+        seccion = ""
+        for sec in SECCIONES:
+            if sec in descripcion:
+                seccion = sec
+                descripcion = descripcion.replace(sec, "").strip()
+                break
+            elif sec in tienda:
+                seccion = sec
+                tienda = tienda.replace(sec, "").strip()
+                break
 
-    # === EJECUCIÓN REAL DE LECTURA ===
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": documento,
+            "TIENDA": tienda,
+            "SECCION": seccion.upper(),
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
 
-    header_positions = detect_header_positions(rutas["remittance"], page_number=1)
-    cuts = build_cuts_from_positions(header_positions)
+    def parse_LTG_FPM(line, voucher):
+        """Parsea vouchers tipo LTG y FPM."""
+        m = pat_documento_pmp.search(line)
+        if not m:
+            return None
+        documento = m.group(1)
+        doc_start, doc_end = m.start(), m.end()
+        descripcion = normalize_whitespace(line[len(voucher):doc_start])
 
-    if cuts:
-        print("\n✔️ Cortes detectados automáticamente:", cuts)
-    else:
-        print("\n⚠️ No se detectaron suficientes columnas — usando fallback por defecto.")
-        cuts = [
-            8,     # VOUCHER
-            46,    # DESCRIPCION
-            102,   # DOCUMENTO 
-            190,   # TIENDA 
-            222,   # TIENDA → SECCION
-            271,   # SECCION → F. REGISTRO
-            318,   # F. REGISTRO → VALOR
-            358,   # VALOR → FAC. IVA
-            410,   # FAC. IVA → RET. FUENTE
-            527,   # RET FUENTE → RET IVA
-            661,   # RET IVA → RET ICA
-            780    # OTROS IMP → VALOR PAG → DOC SOPORTE
-        ]
+        tail = line[doc_end:].strip()
+        tokens_tail = tail.split()
+        idx_sec = None
+        for i, t in enumerate(tokens_tail):
+            if t.upper() in SECCIONES:
+                idx_sec = i
+                break
 
-    tables = camelot_read_with_columns(rutas["remittance"], cuts)
+        if idx_sec is None:
+            mfecha = pat_fecha.search(tail)
+            if not mfecha:
+                return None
+            fecha = mfecha.group(0)
+            before_date = tail.split(fecha, 1)[0].strip()
+            btoks = before_date.split()
+            if btoks and btoks[-1].upper() in SECCIONES:
+                seccion = btoks[-1]
+                tienda = " ".join(btoks[:-1]).strip()
+            else:
+                tienda = before_date
+                seccion = ""
+        else:
+            tienda = " ".join(tokens_tail[:idx_sec]).strip()
+            seccion = tokens_tail[idx_sec]
 
-    if len(tables) == 0:
-        raise ValueError("Camelot no pudo leer ninguna tabla del PDF.")
+        mfecha = pat_fecha.search(tail)
+        fecha = mfecha.group(0)
 
-    df_all = pd.concat([t.df for t in tables], ignore_index=True)
+        nums = extract_numeric_values_after_date(tail.split(fecha,1)[1])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
 
-    # ------------------------------------------------------------
-    # FIX ROBUSTO: detectar encabezado, normalizar y separar DOCUMENTO/TIENDA
-    # ------------------------------------------------------------
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": documento,
+            "TIENDA": tienda,
+            "SECCION": seccion,
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
 
-    # 1) localizar la fila que contiene el encabezado real (contiene "VOUCHER")
-    header_mask = df_all.apply(lambda r: r.astype(str).str.contains("VOUCHER", case=False).any(), axis=1)
-    if not header_mask.any():
-        raise ValueError("No se encontró fila de encabezado (VOUCHER) en df_all. Revisa extracción Camelot.")
-    header_row_idx = header_mask.idxmax()
+    def parse_FS(line, voucher):
+        """Parsea vouchers tipo FS."""
+        m = pat_documento_fs_pair.search(line)
+        if not m:
+            return None
+        documento = f"{m.group(1)} {m.group(2)}"
+        doc_start = m.start()
+        descripcion = normalize_whitespace(line[len(voucher):doc_start])
 
-    # 2) usar esa fila como encabezado real
-    df_all.columns = df_all.iloc[header_row_idx].astype(str).str.replace("\n"," ").str.strip()
+        tail = line[m.end():].strip()
+        mfecha = pat_fecha.search(tail)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
+        before_date = tail.split(fecha,1)[0].strip()
 
-    # 3) eliminar todo lo anterior (cabeceras y basura)
-    df_all = df_all.drop(index=range(0, header_row_idx + 1)).reset_index(drop=True)
+        adm_idx = re.search(r"\bADM\.", before_date, flags=re.IGNORECASE)
+        tienda = before_date[adm_idx.start():].strip() if adm_idx else before_date
 
-    # 4) limpieza básica de nombres de columnas
-    df_all.columns = df_all.columns.str.replace("\n", " ").str.strip()
+        nums = extract_numeric_values_after_date(tail.split(fecha,1)[1])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
 
-    # 5) eliminar columnas vacías tipo 'nan' (nombre literal 'nan' o columnas con nombre vacío)
-    cols_to_drop = [c for c in df_all.columns if str(c).strip().lower() in ("nan", "", "none")]
-    if cols_to_drop:
-        df_all = df_all.drop(columns=cols_to_drop)
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": documento,
+            "TIENDA": tienda,
+            "SECCION": "",
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
 
-    # 6) eliminar filas vacías iniciales si las hay
-    df_all = df_all.loc[~df_all.apply(lambda r: r.astype(str).str.strip().eq('').all(), axis=1)].reset_index(drop=True)
+    def parse_CH(line, voucher):
+        """Parsea vouchers tipo CH o registros con sección fija ("DCA", "DCF", "DND", "DAV", "DCC", "RPL")."""
+        mfecha = pat_fecha.search(line)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
+        pre_date = line[len(voucher):mfecha.start()].strip()
+        adm_idx = re.search(r"\bADM\.", pre_date, flags=re.IGNORECASE)
+        if adm_idx:
+            descripcion = normalize_whitespace(pre_date[:adm_idx.start()])
+            tienda = pre_date[adm_idx.start():].strip()
+        else:
+            descripcion = pre_date
+            tienda = ""
 
-    # 7) Si Camelot pegó DOCUMENTO+TIENDA en una sóla columna (ej. 'DOCUMENTOTIENDA'), dividirla
-    #    Buscamos columnas que contengan 'DOCUMENTO' y 'TIENDA' en el nombre; si existe una que contenga ambos, la partimos.
-    merged_col = None
-    for c in df_all.columns:
-        cu = str(c).upper().replace(" ", "")
-        if "DOCUMENTO" in cu and "TIENDA" in cu:
-            merged_col = c
-            break
+        # Extraer valores numéricos
+        nums = extract_numeric_values_after_date(line[mfecha.end():])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
 
-    if merged_col is not None:
-        # Heurística de separación:
-        #  - 1) intentar split por dos o más espacios
-        #  - 2) intentar split por tokens típicos de tienda (VPP1,VPP2,ADM.,JUMBO,RANCHO,PERFUME,DROGUE, etc.)
-        #  - 3) fallback: split por la última ocurrencia de espacio si el último token es corto (código tienda)
-        import re
-        merged_series = df_all[merged_col].astype(str)
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": "",
+            "TIENDA": tienda,
+            "SECCION": "",
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
 
-        def split_documento_tienda(s):
-            s = s.replace("\n", " ").strip()
-            if s == "" or s.upper() == "NAN":
-                return ("", "")
-            # 1) doble espacio
-            m = re.search(r'\s{2,}', s)
-            if m:
-                left = s[:m.start()].strip()
-                right = s[m.end():].strip()
-                return (left, right)
-            # 2) patrones de tiendas conocidos
-            patterns = [' VPP', ' ADM', ' JUMBO', ' PLAT', ' PLATA', ' RANCHO', ' PERFUME', ' DROGUE', ' CUCU', ' DOCKIN', ' BUCARAM']
-            for p in patterns:
-                if p in s.upper():
-                    idx = s.upper().find(p)
-                    # left part before token, right part from token start
-                    return (s[:idx].strip(), s[idx:].strip())
-            # 3) fallback por último espacio si último token corto (códigos tienda o abreviaturas)
-            parts = s.rsplit(' ', 1)
-            if len(parts) == 2 and len(parts[1]) <= 10:
-                return (parts[0].strip(), parts[1].strip())
-            # 4) si no se detecta, devolvemos original como DOCUMENTO y tienda vacía
-            return (s, "")
+    def parse_generic(line, voucher):
+        """Intento de parseo genérico si no entra en los tipos anteriores."""
+        for fn in (parse_DEC, parse_LTG_FPM, parse_FS, parse_CH):
+            r = fn(line, voucher)
+            if r:
+                return r
+        # Fallback
+        mfecha = pat_fecha.search(line)
+        if not mfecha:
+            return None
+        fecha = mfecha.group(0)
+        descripcion = normalize_whitespace(line[len(voucher):mfecha.start()])
+        nums = extract_numeric_values_after_date(line[mfecha.end():])
+        while len(nums) < 8:
+            nums.append("0")
+        valor, iva, ret_fuente, ret_iva, ret_ica, otros_imp, valor_pag = nums[:7]
+        doc_soporte = nums[7]
+        return {
+            "VOUCHER": voucher,
+            "DESCRIPCION": descripcion,
+            "DOCUMENTO": "",
+            "TIENDA": "",
+            "SECCION": "",
+            "F. REGISTRO": fecha,
+            "VALOR": valor,
+            "IVA": iva,
+            "RET. FUENTE": ret_fuente,
+            "RET. IVA": ret_iva,
+            "RET. ICA": ret_ica,
+            "OTROS IMP.": otros_imp,
+            "VALOR PAG": valor_pag,
+            "DOC.SOPORTE": doc_soporte
+        }
 
-        splits = merged_series.map(split_documento_tienda)
-        df_all['DOCUMENTO'] = splits.map(lambda x: x[0])
-        df_all['TIENDA'] = splits.map(lambda x: x[1])
+    # -----------------------
+    # Dispatcher principal
+    # -----------------------
+    def parse_record(line: str):
+        line = normalize_whitespace(line)
+        m_start = re.match(rf"^{VOUCHERS}\b", line, flags=re.IGNORECASE)
+        if not m_start:
+            return None
+        voucher = m_start.group(1).upper()
 
-        # borrar la columna mergeada original
-        df_all = df_all.drop(columns=[merged_col])
+        if voucher in {"DCA", "DCF", "DND", "DAV", "DCC", "RPL"}:
+            return parse_CH(line, voucher)  # sección fija
+        if voucher == "DEC":
+            return parse_DEC(line, voucher)
+        if voucher in {"LTG", "FPM"}:
+            return parse_LTG_FPM(line, voucher)
+        if voucher == "FS":
+            return parse_FS(line, voucher)
+        if voucher == "CH":
+            return parse_CH(line, voucher)
 
-    else:
-        # 8) Si las columnas existen separadas pero con nombres pegados (ej. 'DOCUMENTOTIENDA' sin espacio),
-        # intentamos renombrar por coincidencias parciales: preferimos columnas separadas si están como 2 columnas en una celda.
-        # Buscamos nombres parecidos y normalizamos.
-        cols_upper = [str(c).upper().replace(" ", "") for c in df_all.columns]
-        # Si existe 'DOCUMENTOTIENDA' como nombre exacto
-        if 'DOCUMENTOTIENDA' in cols_upper:
-            idx = cols_upper.index('DOCUMENTOTIENDA')
-            colname = df_all.columns[idx]
-            merged_series = df_all[colname].astype(str)
-            # reusar la misma heurística de split
-            import re
-            def split_documento_tienda_simple(s):
-                s = s.replace("\n", " ").strip()
-                m = re.search(r'\s{2,}', s)
-                if m:
-                    left = s[:m.start()].strip()
-                    right = s[m.end():].strip()
-                    return (left, right)
-                parts = s.rsplit(' ', 1)
-                if len(parts) == 2 and len(parts[1]) <= 10:
-                    return (parts[0].strip(), parts[1].strip())
-                return (s, "")
-            splits = merged_series.map(split_documento_tienda_simple)
-            df_all['DOCUMENTO'] = splits.map(lambda x: x[0])
-            df_all['TIENDA'] = splits.map(lambda x: x[1])
-            df_all = df_all.drop(columns=[colname])
+        return parse_generic(line, voucher)
 
-    # 9) Normalizar nombres: dejar en mayúsculas sin puntos para las referencias internas
-    df_all.columns = [str(c).strip() for c in df_all.columns]
+    # ------------------------
+    # Lectura y parseo PDF
+    # ------------------------
+    records = []
+    with pdfplumber.open(rutas["remittance"]) as pdf:
+        for page in pdf.pages:
+            txt = page.extract_text()
+            if not txt:
+                continue
+            lines = txt.split("\n")
+            # Saltar encabezado
+            for i, l in enumerate(lines):
+                if l.strip().startswith("VOUCHER"):
+                    lines = lines[i+1:]
+                    break
+            merged = merge_lines(lines)
+            for rec_line in merged:
+                parsed = parse_record(rec_line)
+                if parsed:
+                    records.append(parsed)
 
-    # 10) Asegurar que las columnas esperadas existan (crearlas vacías si no)
-    expected = ["VOUCHER","DESCRIPCION","DOCUMENTO","TIENDA","SECCION","F. REGISTRO","VALOR PAG","DOC.SOPORTE"]
-    for e in expected:
-        if e not in df_all.columns:
-            df_all[e] = ""
-
-    # 11) reindex opcional (orden lógico)
-    # mantenemos todas las columnas que vinieron pero aseguramos que DOCUMENTO y TIENDA existan
-    cols_order = [c for c in df_all.columns if c not in ("DOCUMENTO","TIENDA")]
-    # colocar DOCUMENTO y TIENDA junto a la DESCRIPCION (si existe), intentando una posición coherente
-    insert_at = 2 if len(cols_order) >= 2 else len(cols_order)
-    if 'DOCUMENTO' in df_all.columns:
-        if 'DOCUMENTO' in cols_order:
-            cols_order.remove('DOCUMENTO')
-    if 'TIENDA' in df_all.columns:
-        if 'TIENDA' in cols_order:
-            cols_order.remove('TIENDA')
-    new_order = cols_order[:insert_at] + ['DOCUMENTO','TIENDA'] + cols_order[insert_at:]
-    # Asegurarnos de eliminar duplicados en order
-    seen = set()
-    new_order = [x for x in new_order if not (x in seen or seen.add(x))]
-    df_all = df_all.reindex(columns=new_order)
-    
-    # ==========================================================
-    # FIX PARA FILAS DESALINEADAS CUANDO SECCION COMIENZA CON "PLAT"
-    # ==========================================================
-
-    def corregir_filas_plat(df):
-        """
-        Detecta filas donde SECCION arranca con 'PLAT' pero el patrón
-        de columnas está corrido hacia la derecha.
-
-        Corrección:
-            TIENDA        <- SECCION
-            SECCION       <- F. REGISTRO
-            F. REGISTRO   <- VALOR FAC.
-            VALOR FAC.    <- IVA FAC.
-            IVA FAC.      <- RET. FUENTE
-            RET. FUENTE   <- RET. IVA
-            RET. IVA      <- RET. ICA
-            RET. ICA      <- OTROS IMP.
-            OTROS IMP.    <- VALOR PAG
-            VALOR PAG     <- DOC.SOPORTE
-            DOC.SOPORTE   <- ""   (queda vacío)
-        """
-
-        cols = [
-            "VOUCHER","DESCRIPCION","DOCUMENTOTIENDA",
-            "SECCION","F. REGISTRO","VALOR FAC.","IVA FAC.",
-            "RET. FUENTE","RET. IVA","RET. ICA","OTROS IMP.",
-            "VALOR PAG","DOC.SOPORTE"
-        ]
-
-        for idx, row in df.iterrows():
-            sec = str(row.get("SECCION", "")).strip().upper()
-
-            # Detecta patrón PLAT desalineado
-            if sec.startswith("PLAT"):
-
-                # Aplicar corrimiento
-                df.at[idx, "TIENDA"]        = row["SECCION"]
-                df.at[idx, "SECCION"]       = row["F. REGISTRO"]
-                df.at[idx, "F. REGISTRO"]   = row["VALOR FAC."]
-                df.at[idx, "VALOR FAC."]    = row["IVA FAC."]
-                df.at[idx, "IVA FAC."]      = row["RET. FUENTE"]
-                df.at[idx, "RET. FUENTE"]   = row["RET. IVA"]
-                df.at[idx, "RET. IVA"]      = row["RET. ICA"]
-                df.at[idx, "RET. ICA"]      = row["OTROS IMP."]
-                df.at[idx, "OTROS IMP."]    = row["VALOR PAG"]
-                df.at[idx, "VALOR PAG"]     = row["DOC.SOPORTE"]
-                df.at[idx, "DOC.SOPORTE"]   = ""
-
-        return df
-
-
-    # 🔧 APLICAR FIX AQUÍ:
-    df_all = corregir_filas_plat(df_all)
-    
-    # =====================================================
-    # FIX EXTRA — corregir columnas corridas por SECCION pegada a TIENDA
-    # =====================================================
-
-    secciones_validas = ["PERFUME", "DROGUE", "PERFUMERIA", "DROGUERIA", "MONTERIA"]
-
-    def corregir_tienda_seccion(row):
-        tienda = str(row.get("TIENDA", "")).strip()
-        seccion = str(row.get("SECCION", "")).strip()
-
-        # Si la SECCION ya está correctamente ubicada → no tocar
-        if seccion in secciones_validas:
-            return row
-
-        # Detectar si TIENDA termina en una SECCION válida
-        for sec in secciones_validas:
-            if tienda.endswith(" " + sec):
-                base = tienda[: -(len(sec))].strip()
-                row["TIENDA"] = base
-                row["SECCION"] = sec
-
-                # DESPLAZAR TODAS LAS COLUMNAS CORRIDAS
-                columnas = [
-                    "F. REGISTRO", "VALOR FAC.", "IVA FAC.", "RET. FUENTE",
-                    "RET. IVA", "RET. ICA", "OTROS IMP.", "VALOR PAG", "DOC.SOPORTE"
-                ]
-
-                valores = [row.get(c, "") for c in columnas]
-
-                # Si DOC.SOPORTE vino vacío o tiene basura pero VALOR PAG está desplazado
-                # detectamos desplazamiento cuando VALOR PAG es muy grande o raro
-                if row.get("DOC.SOPORTE", "") in ["", None] and str(row.get("VALOR PAG", "")).isdigit():
-                    # shift left
-                    valores = valores[1:] + [""]
-
-                for i, c in enumerate(columnas):
-                    row[c] = valores[i]
-
-                return row
-
-        return row
-
-    df_all = df_all.apply(corregir_tienda_seccion, axis=1)
-
-    # Print de columnas
-#    print("✔️ Normalización completa. Columnas resultantes:")
-#    print(df_all.columns.tolist())
-
-    # =====================================================
-    # 4. Limpieza de Remittance
-    # =====================================================
-
-    # Tipos válidos de VOUCHER para Cencosud
-    filter_values = [
-        'DAT','CH','DAV','DCA','DCC','DCF','DEV','DND','DPC','FPM','FS','LTG','RPL','DEC'
+    # ------------------------
+    # Crear DataFrame
+    # ------------------------
+    cols = [
+        "VOUCHER","DESCRIPCION","DOCUMENTO","TIENDA","SECCION",
+        "F. REGISTRO","VALOR FAC.","IVA FAC.","RET. FUENTE","RET. IVA",
+        "RET. ICA","OTROS IMP.","VALOR PAG","DOC.SOPORTE"
     ]
+    df = pd.DataFrame(records)
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
+    df = df[cols]
 
-    # Filtrar filas por la primera columna (la del tipo de voucher)
-    remittance = df_all[df_all[df_all.columns[0]].isin(filter_values)].copy()
-    
-    # =====================================================
-    # AJUSTE: Completar SECCION cuando viene vacía y viene
-    # pegada al final de DOCUMENTO (DROGUE / PERFUME)
-    # =====================================================
+    # ------------------------
+    # Separar DOCUMENTO + TIENDA pegados (especial DEC)
+    # ------------------------
+    pat_merged = re.compile(r"^(\d{4}-\d{7,20})([A-ZÁÉÍÓÚÑ0-9 .-]+)$", flags=re.IGNORECASE)
+    for idx, row in df.iterrows():
+        doc = str(row["DOCUMENTO"]).strip()
+        tienda = str(row["TIENDA"]).strip()
+        if not doc and tienda:
+            m = pat_merged.match(tienda.replace(" ", ""))
+            if m:
+                df.at[idx, "DOCUMENTO"] = m.group(1)
+                df.at[idx, "TIENDA"] = normalize_whitespace(m.group(2))
 
-    secciones_validas = ["DROGUE", "PERFUME"]
+    # ------------------------
+    # Extraer SECCION pegada en DESCRIPCION o TIENDA
+    # ------------------------
+    secciones_sorted = sorted(SECCIONES, key=lambda s: -len(s))
 
+    def extract_and_move_section_from_text(text: str):
+        if not isinstance(text, str):
+            return text, ""
+        txt_low = text.lower()
+        for sec in secciones_sorted:
+            sec_low = sec.lower()
+            idx = txt_low.rfind(sec_low)
+            if idx != -1:
+                seccion = text[idx:idx+len(sec)]
+                new_text = re.sub(r"\s+", " ", (text[:idx] + text[idx+len(sec):]).strip())
+                return new_text, seccion.upper()
+        return text, ""
 
-    def corregir_seccion(row):
-        seccion = str(row.get("SECCION", "")).strip()
-        documento = str(row.get("DOCUMENTO", "")).strip()
+    def fix_row_move_section(row):
+        desc = str(row.get("DESCRIPCION", "")).strip()
+        tienda = str(row.get("TIENDA", "")).strip()
+        seccion_actual = str(row.get("SECCION", "")).strip()
 
-        # Caso 1: SECCION contiene una fecha → detectar si contiene "/"
-        if "/" in seccion:
-            for sec in secciones_validas:
-                if documento.endswith(sec):
-                    row["SECCION"] = sec
-                    row["DOCUMENTO"] = documento[: -len(sec)].strip()
-                    return row
-            # Si tiene fecha pero no coincide con ningún final válido, simplemente vaciar
-            row["SECCION"] = ""
+        new_desc, found = extract_and_move_section_from_text(desc)
+        if found:
+            row["DESCRIPCION"] = new_desc
+            row["SECCION"] = found
+            tienda = tienda.replace(found, "").strip()
+            row["TIENDA"] = re.sub(r"\s+", " ", tienda)
             return row
 
-        # Caso 2: SECCION está vacía → la lógica original
-        if seccion in ["", None]:
-            for sec in secciones_validas:
-                if documento.endswith(sec):
-                    row["SECCION"] = sec
-                    row["DOCUMENTO"] = documento[: -len(sec)].strip()
-                    return row
+        new_tienda, found = extract_and_move_section_from_text(tienda)
+        if found:
+            row["TIENDA"] = new_tienda
+            row["SECCION"] = found
+            return row
 
+        row["DESCRIPCION"] = re.sub(r"\s+", " ", desc)
+        row["TIENDA"] = re.sub(r"\s+", " ", tienda)
+        row["SECCION"] = seccion_actual
         return row
 
-    remittance = remittance.apply(corregir_seccion, axis=1)
-    
-    
-    # Tranformamos a numerico el dato "VALOR PAG"
-    remittance["VALOR PAG"] = (
-        remittance["VALOR PAG"]
-        .astype(str)
-        .str.replace(".", "", regex=False)   # quitar puntos de miles
-        .str.replace(",", ".", regex=False)  # convertir coma a decimal
-    )
-    
-    remittance["VALOR PAG"] = pd.to_numeric(remittance["VALOR PAG"], errors="coerce")
+    df = df.apply(fix_row_move_section, axis=1)
 
-    # Parche necesario, dejar. Por lectura de pdf se puede movel el valor de la columna "VALOR PAG" a "DOC.SOPORTE".
-    # Esta linea reemplaza los valores de "VALOR PAG" cuando es 0 por el valor de "DOC.SOPORTE"
-    remittance.loc[remittance["VALOR PAG"] == 0, "VALOR PAG"] = remittance["DOC.SOPORTE"]
-    
-    # FIX: mover valores muy grandes de VALOR PAG a DOC.SOPORTE
-    umbral = 20000000000000  # 20 billones
+    # Validar SECCION
+    df["SECCION"] = df["SECCION"].fillna("").str.upper().str.strip()
+    df.loc[~df["SECCION"].isin(SECCIONES), "SECCION"] = ""
+    df["TIENDA"] = df["TIENDA"].astype(str).str.strip()
 
-    # --- Limpiar y convertir columnas a numérico para comparación ---
-    def clean_to_numeric(col):
-        return pd.to_numeric(
-            col.astype(str).str.replace(".", "", regex=False),
-            errors="coerce"
-        )
+    # PARCHES
+    # Parche para casos puntuales por no poder leer registros multi-línea
+    for idx, row in df.iterrows():
+        # DESCRIPCION específica para RPL
+        if row["VOUCHER"] == "RPL" and row["DESCRIPCION"].strip().upper() == "DESCUENTO":
+            df.at[idx, "DESCRIPCION"] = "DESCUENTO COMERCIAL"
 
-    valor_pag_num = clean_to_numeric(remittance["VALOR PAG"])
-    otros_imp_num = clean_to_numeric(remittance["OTROS IMP."])
+        # Ajuste de SECCION
+        if row["SECCION"].strip().upper() == "DROGUE":
+            df.at[idx, "SECCION"] = "DROGUER"
 
-    # --- Máscara de valores muy grandes ---
-    mask_grande = valor_pag_num > umbral
-
-    # Pasar valores grandes a DOC.SOPORTE
-    remittance["DOC.SOPORTE"] = ""
-    remittance.loc[mask_grande, "DOC.SOPORTE"] = remittance.loc[mask_grande, "VALOR PAG"]
-
-    # Mover OTROS IMP. a VALOR PAG solo si OTROS IMP. != 0
-    mask_otros = otros_imp_num != 0
-    remittance.loc[mask_grande & mask_otros, "VALOR PAG"] = remittance.loc[mask_grande & mask_otros, "OTROS IMP."]
-
-    # Aseguramos que DOC.SOPORTE sea string y vacío si <= umbral
-    # Convertimos DOC.SOPORTE a número limpio y seguro
-    doc_sop_num = pd.to_numeric(
-        remittance["DOC.SOPORTE"].astype(str).str.replace(".", "", regex=False),
-        errors="coerce"
-    )
-
-    # Reemplazamos según el umbral SIN generar arrays irregulares
-    remittance["DOC.SOPORTE"] = np.where(
-        doc_sop_num > umbral,
-        remittance["DOC.SOPORTE"].astype(str),
-        ""
-    )
-
-    # OTROS IMP. siempre = 0
-    remittance["OTROS IMP."] = 0
-
-    # Ordenamiento personalizado
-    def sort_key(val):
-        if val == "VOUCHER": return "0"
-        if val == "FPM":     return "1"
-        return "2" + str(val)
-
-    remittance["sort_order"] = remittance[remittance.columns[0]].apply(sort_key)
-
-    remittance = (
-        remittance.sort_values(by="sort_order")
-        .drop(columns="sort_order")
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
-    
-    # Sobrescribir SECCION con F. REGISTRO solo para valores específicos o dentro de TIENDA
-
-    valores_validos = ["DROGUE", "PERFUME", "PLATOS", "RANCHO"]
-
-    # Asegurar columnas como string
-    for col in ["F. REGISTRO", "TIENDA", "SECCION"]:
-        if col in remittance.columns:
-            remittance[col] = remittance[col].fillna("").astype(str).str.upper().str.strip()
-
-    # 1) Coincidencia exacta en F. REGISTRO
-    if "F. REGISTRO" in remittance.columns:
-        mask_registro = remittance["F. REGISTRO"].isin(valores_validos)
-        remittance.loc[mask_registro, "SECCION"] = remittance.loc[mask_registro, "F. REGISTRO"]
-
-    # 2) Coincidencia parcial dentro de TIENDA
-    if "TIENDA" in remittance.columns:
-        for val in valores_validos:
-            mask_tienda = remittance["TIENDA"].str.contains(val, case=False, na=False)
-            remittance.loc[mask_tienda, "SECCION"] = val
-
+        # Ajustes específicos de TIENDA
+        tienda_val = row["TIENDA"].strip().upper()
+        if tienda_val == "PLAT - CROSS":
+            df.at[idx, "TIENDA"] = "PLAT - CROSS DOCKIN"
+        elif tienda_val == "PLAT - PLAT":
+            df.at[idx, "TIENDA"] = "PLAT - PLAT BUCARAM"
+        elif tienda_val == "PLAT - CROSSD":
+            df.at[idx, "TIENDA"] = "PLAT - CROSSD AVERI"
+            
+    # Creacion de remittance
+    remittance = df
     # 2.1 Guardar Remittance en buffer en memoria
     remittance_buffer = io.BytesIO()
     with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:

@@ -12,6 +12,9 @@ from clientes.utils import *
 
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
 
+# =====================================================
+# 1. Localización dinámica de la carpeta raíz del proyecto
+# =====================================================
 def _project_root():
     if getattr(sys, "frozen", False):
         macos_dir = os.path.dirname(sys.executable)
@@ -20,6 +23,9 @@ def _project_root():
         return os.path.dirname(app_bundle)
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+# =====================================================
+# 2. Función principal del proceso (procesar)
+# =====================================================
 def procesar():
     root = _project_root()
     
@@ -30,9 +36,11 @@ def procesar():
         "salida": os.path.join(root, "Archivos", "Template", "Ecuador", "Template_HRC_TIA.xlsx")
     }
     
-    customer_id = 1234  # FALTA
+    customer_id = 10273302
     
-    # --- Lectura PDF ---
+    # =====================================================
+    # 1. Lectura de Remitente
+    # =====================================================
     def extraer_facturas(archivo_pdf):
         filas = []
 
@@ -86,7 +94,7 @@ def procesar():
 
         df = pd.DataFrame(
             registros,
-            columns=["Fecha", "Plaza Pago", "Tipo", "Documento", "Bruto", "Retención", "Neto a Pagar"]
+            columns=["Fecha Factura", "Plaza Pago", "Documento", "Tipo", "Bruto", "Retención", "Neto a Pagar"]
         )
 
         # Parche
@@ -96,7 +104,12 @@ def procesar():
         return df
 
     remittance = extraer_facturas(rutas["pdf_remittance"])
-
+    
+    # 2.1 Guardar Remittance en buffer en memoria
+    remittance_buffer = io.BytesIO()
+    with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
+        remittance.to_excel(writer, index=False)
+    remittance_buffer.seek(0)
     # --- LIMPIEZA Y TRANSFORMACIÓN ---
     remittance = remittance.rename(columns={
         "Documento": "Referencia / Factura",
@@ -106,7 +119,7 @@ def procesar():
 
     # Conversión a numérico
     remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
-
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str[1:]
     # Tipo de documento
     conds = [
         remittance["Relación Cliente"].str.startswith("F", na=False) & (remittance["Importe de Remittance"] > 0),
@@ -132,16 +145,48 @@ def procesar():
         remittance["Motivo del descuento"]
     )
 
-    # --- Lectura de Cartera desde FBL5N ---
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    
+    # =====================================================
+    # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
+    # =====================================================
+    
+    remittance = procesar_descuentos_y_comentarios(remittance)
 
-    # --- Merge Remittance + FBL5N ---
+    # =====================================================
+    # 7. Lectura de la Cartera (FBL5N) (datos desde SAP)
+    # =====================================================
+    # =====================================================
+    # 8. Filtro de la cartera del cliente
+    # =====================================================
+    # =====================================================
+    # 9. Renombrado y limpieza de columnas
+    # =====================================================
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    
+    # =====================================================
+    # 10. Merge Remittance + FBL5N por "Referencia / Factura"
+    # =====================================================
+    # Se realiza un merge tipo "left" sobre 'Referencia / Factura' para mantener todas
+    # las filas de Remittance y añadir información de FBL5N cuando exista coincidencia
     hrc_template = merge_remittance_cartera(remittance, FBL5N)
+    
 
-    # --- Procesar diferencias y NRO ---
+    # =====================================================
+    # 11. Cálculo de diferencias
+    # =====================================================
+    # Se calcula la diferencia entre 'Importe de factura' y 'Importe de Remittance'
+    # La lógica centralizada se encuentra en la función procesar_diferencias()
     hrc_template = procesar_diferencias(hrc_template)
+    
+    # =====================================================
+    # 12. Agregamos registros NRO
+    # =====================================================
     hrc_template = procesamiento_nro(hrc_template, FBL5N)
-
+    
+    # =====================================================
+    # 13. Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
+    # =====================================================
+    # Por defecto, 'Pago Neto' = 'Importe de factura'
     # Pago Neto
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
 
@@ -157,15 +202,6 @@ def procesar():
     ]
     hrc_template = hrc_template[columnas_finales]
 
-    # --- Exportar template ---
-    remittance_buffer = io.BytesIO()
-    with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
-        remittance.to_excel(writer, index=False)
-    remittance_buffer.seek(0)
-
-    fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
-    id_cliente = fbl5n_meta["Customer"].iloc[0]
-    nombre_cliente = fbl5n_meta["Name 1"].iloc[0]
 
     exportar_template(
         hrc_template=hrc_template,

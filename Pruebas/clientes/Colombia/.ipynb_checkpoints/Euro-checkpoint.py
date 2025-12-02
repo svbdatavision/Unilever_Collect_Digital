@@ -321,7 +321,7 @@ def procesar():
     with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
         df_final.to_excel(writer, index=False)
     remittance_buffer.seek(0)
- 
+     
     # =====================================================
     # 4. Limpieza de Remittance
     # =====================================================
@@ -329,7 +329,7 @@ def procesar():
     # Replace 'PMP ' and 'PM ' with 'PMP' in the 'Doc.Cruce' column
     df_final['Doc.Cruce'] = df_final['Doc.Cruce'].str.replace('PMP ', 'PMP', regex=False)
     df_final['Doc.Cruce'] = df_final['Doc.Cruce'].str.replace('PM ', 'PMP', regex=False)
- 
+    
     # Clean and convert the 'Valor Pago' column to float
     df_final['Valor Pago'] = (
         df_final['Valor Pago']
@@ -339,7 +339,7 @@ def procesar():
         .str.replace('−', '-', regex=False)  # Handle special minus sign if present
         .astype(float)
     )
- 
+    
     #Create the new column 'Tipo de Documento' based on the conditions
     df_final['Tipo de Documento'] = df_final.apply(
         lambda row: 'Factura' if row['C.O.'] == 'CED' and row['Valor Pago'] > 0 else 'Descuento Cliente',
