@@ -49,6 +49,11 @@ def procesar(archivos_remittance, archivo_fbl5n):
     hrc_template = procesar_diferencias(hrc_template)
     hrc_template = procesamiento_nro(hrc_template, FBL5N)
 
+    if "Motivo del descuento" in hrc_template.columns:
+        mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("384")
+        if mask.any():
+            hrc_template.loc[mask, "Motivo del descuento"] = "WOB"
+
     # Ajustar columnas finales
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
     columnas_finales = [

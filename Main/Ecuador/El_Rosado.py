@@ -1,7 +1,7 @@
 # =====================================================
 # 0. Importación de librerías y módulos utilitarios
 # =====================================================
-
+ 
 import os
 import sys
 import io
@@ -13,7 +13,11 @@ from utils import *
  
 warnings.filterwarnings("ignore", category=UserWarning, module="camelot")
  
+<<<<<<< HEAD
+ 
+=======
 
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
@@ -30,7 +34,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # 3. Lectura de Remitente
     # =====================================================
     # Leemos la tabla principal del Remittance: (ajustado a PDF) - usando Camelot
-    
+   
     tables = camelot.read_pdf(rutas["pdf_remittance"], pages='all', flavor='stream', strip_text='\n')
     df_all = pd.concat([t.df for t in tables], ignore_index=True)
  
@@ -52,15 +56,19 @@ def procesar(archivo_remittance,archivo_fbl5n):
             df_all['Importe']
             .str.replace('-', '', regex=False)
         )
+<<<<<<< HEAD
+   
+=======
     
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     remittance = df_all
-        
+       
     # 2.1 Guardar Remittance en buffer en memoria
     remittance_buffer = io.BytesIO()
     with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
         remittance.to_excel(writer, index=False)
     remittance_buffer.seek(0)
-
+ 
     # ============================================
     # LIMPIEZA
     # ============================================
@@ -82,6 +90,18 @@ def procesar(archivo_remittance,archivo_fbl5n):
         errors="coerce"
     )
     )
+<<<<<<< HEAD
+ 
+    # 1. Convertir la columna a numérico (ya lo hicimos antes)
+    remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
+ 
+    # 2. Filtrar filas donde el importe no sea NaN
+    remittance = remittance.dropna(subset=["Importe de Remittance"])
+ 
+    # 3. Limpiar la columna 'Referencia / Factura' eliminando guiones
+    remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str.replace("-", "", regex=False)
+ 
+=======
 
     # 1. Convertir la columna a numérico (ya lo hicimos antes)
     remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
@@ -92,33 +112,39 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # 3. Limpiar la columna 'Referencia / Factura' eliminando guiones
     remittance["Referencia / Factura"] = remittance["Referencia / Factura"].astype(str).str.replace("-", "", regex=False)
 
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     # 4. Crear la columna 'Tipo de Documento'
     remittance["Tipo de Documento"] = remittance["Importe de Remittance"].apply(
         lambda x: "Factura" if x > 0 else "Descuento"
     )
+<<<<<<< HEAD
+ 
+    print(remittance)
+=======
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     # =====================================================
     # Lectura de la Cartera (FBL5N) (datos desde SAP)
     # =====================================================
  
     FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
-
+ 
     # =====================================================
     #  Merge Remittance + FBL5N por "Referencia / Factura"
     # =====================================================
  
     hrc_template = merge_remittance_cartera(remittance, FBL5N)
-
+ 
     # =====================================================
     # 11. Cálculo de diferencias
     # =====================================================
  
     hrc_template = procesar_diferencias(hrc_template)
-
+ 
     # =====================================================
     #  Agregamos registros NRO
     # =====================================================
     hrc_template = procesamiento_nro(hrc_template, FBL5N)
-
+ 
     # =====================================================
     #  Asignación de Pago Neto (Pago Neto = Importe de factura) y otros ajustes
     # Reemplazar solo valores 'CSR' en 'Motivo del descuento' por '987' (solo cuando exista la columna)
@@ -126,11 +152,21 @@ def procesar(archivo_remittance,archivo_fbl5n):
         mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("CSR")
         if mask.any():
             hrc_template.loc[mask, "Motivo del descuento"] = "987"
+<<<<<<< HEAD
+    if "Motivo del descuento" in hrc_template.columns:
+        mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("384")
+        if mask.any():
+            hrc_template.loc[mask, "Motivo del descuento"] = "WOB"
+    # =====================================================
+    # Por defecto, 'Pago Neto' = 'Importe de factura'
+ 
+=======
     # =====================================================
     # Por defecto, 'Pago Neto' = 'Importe de factura'
 
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
-
+ 
     # =====================================================
     # 14. Definición de columnas finales para el template
     # =====================================================
@@ -143,10 +179,10 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "Pago Neto",
         "Comentarios"
         ]
-    
+   
 # Mantener solo las columnas relevantes en el orden esperado por el template
     hrc_template = hrc_template[columnas_finales]
-
+ 
     # =====================================================
     # 15. Preparación de parámetros y extracción de datos dinámicos (para exportar_template)
     # =====================================================
@@ -154,12 +190,12 @@ def procesar(archivo_remittance,archivo_fbl5n):
         # wb_rem = load_workbook(rutas["remittance"], data_only=True)
         # ws_rem = wb_rem.active
         # numero_orden = ws_rem["B7"].value
-
+ 
 # 15.2 Extraer id_cliente / nombre_cliente desde FBL5N (primer registro)
     fbl5n_meta = pd.read_excel(rutas["fbl5n"], usecols=["Customer", "Name 1"], nrows=1)
     id_cliente = fbl5n_meta["Customer"].iloc[0]
     nombre_cliente = fbl5n_meta["Name 1"].iloc[0]
-
+ 
 # 15.3 Exportar (la función exportar_template aplica el formato y copia hoja Remittance)
     exportar_template(
         hrc_template=hrc_template,
@@ -170,6 +206,10 @@ def procesar(archivo_remittance,archivo_fbl5n):
         ruta_remittance=remittance_buffer,
         ruta_salida=rutas["salida"]
         )
-
+ 
 # Devolución del template final
     return hrc_template
+<<<<<<< HEAD
+ 
+=======
+>>>>>>> 725bc9e80d0302bd3242a94e06d0938cc28956c8
