@@ -82,7 +82,22 @@ def procesar(archivo_remittance,archivo_fbl5n):
         .astype(float)                   # convertir a float
         .round(2)
     )
-
+    
+    # Sumamos los Importes, cuando las Facturas son las mismas
+    # Solo facturas: agrupamos y sumamos 'Importe de Remittance'
+    facturas_agrupadas = (
+        remittance[remittance['Tipo de Documento'] == 'Factura']
+        .groupby('Referencia / Factura', as_index=False)
+        .agg({
+            'Importe de Remittance': 'sum',
+            'Tipo de Documento': 'first',  # conserva 'Factura'
+        })
+    )
+    # Registros que no son factura
+    no_facturas = remittance[remittance['Tipo de Documento'] != 'Factura']
+    # concat
+    remittance = pd.concat([facturas_agrupadas, no_facturas], ignore_index=True)
+    
     # Asegurar la existencia de columnas que usaremos más adelante
     for col in ["Descuento", "Motivo del descuento"]:
         if col not in remittance.columns:
