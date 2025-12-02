@@ -560,7 +560,7 @@ def procesar():
     agrupados["Tipo de Documento"] = "Descuentos Clientes"
     agrupados["Descuento"] = agrupados["SECCION"]
     agrupados["Motivo del descuento"] = "987"
-    agrupados["Comentarios"] = agrupados["VOUCHER"] + " DSCTO " + agrupados["DOC.SOPORTE"].fillna("") + " " + agrupados["Referencia / Factura"].fillna("") + " " + agrupados["SECCION"].fillna("")
+    agrupados["Comentarios"] = agrupados["VOUCHER"] + " DSCTO " + agrupados["DOC.SOPORTE"].fillna("") + " " + agrupados["SECCION"].fillna("") + " " + agrupados["Referencia / Factura"].fillna("")
     remittance = pd.concat([remittance.loc[~mask].copy(), agrupados], ignore_index=True)
 
     # FS
@@ -568,7 +568,7 @@ def procesar():
     remittance.loc[mask, "Tipo de Documento"] = "Descuentos Clientes"
     remittance.loc[mask, "Descuento"] = "FACT PROVEED"
     remittance.loc[mask, "Motivo del descuento"] = "CSB"
-    remittance.loc[mask, "Comentarios"] = remittance.loc[mask, "Referencia / Factura"]
+    remittance.loc[mask, "Comentarios"] = "FACT PROVEED" + " " + remittance.loc[mask, "Referencia / Factura"]
 
     # DEV
     mask = remittance["VOUCHER"] == "DEV"

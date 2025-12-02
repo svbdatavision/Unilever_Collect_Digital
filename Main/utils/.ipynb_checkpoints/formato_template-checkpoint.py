@@ -64,13 +64,14 @@ def exportar_template(
         else:
             return 1  # el resto en el medio
 
+    hrc_template = hrc_template.copy()
     hrc_template["_orden_motivo"] = hrc_template["Motivo del descuento"].apply(orden_motivo)
 
     # Ordenar: primero por la columna auxiliar (0 -> vacíos, 1 -> medio, 2 -> últimos),
     # y dentro de cada grupo ordenar "Motivo del descuento" en orden DESCENDENTE.
     hrc_template = hrc_template.sort_values(
-        by=["_orden_motivo", "Descuento", "Tipo de Documento", "Referencia / Factura"],
-        ascending=[True, True, True, True]   # _orden_motivo ascendente, Descuento ascendente
+        by=["_orden_motivo", "Motivo del descuento", "Descuento", "Tipo de Documento", "Referencia / Factura"],
+        ascending=[True, True, True, True, True]
     ).reset_index(drop=True)
 
     # Eliminar columna auxiliar
