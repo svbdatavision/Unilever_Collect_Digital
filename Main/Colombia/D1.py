@@ -147,8 +147,10 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # 10. Dato de Pago Neto = Importe de factura y otros ajustes
     # =====================================================
     
-
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+    
+    hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Descuento"] = ""
+
 
     # =====================================================
     # 11. Definimos columnas finales

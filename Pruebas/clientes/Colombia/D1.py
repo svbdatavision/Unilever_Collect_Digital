@@ -148,6 +148,9 @@ def procesar():
     
 
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
+    
+    hrc_template.loc[hrc_template["Tipo de Documento"] == "Factura", "Descuento"] = ""
+
 
     # =====================================================
     # 11. Definimos columnas finales
