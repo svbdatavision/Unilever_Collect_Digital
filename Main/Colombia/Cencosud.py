@@ -634,6 +634,18 @@ def procesar(archivo_remittance,archivo_fbl5n):
     # las filas de Remittance y añadir información de FBL5N cuando exista coincidencia
     hrc_template = merge_remittance_cartera(remittance, FBL5N)
     
+    # Parche
+    # Eliminar facturas mal cargadas
+    # (luego de normalizar y asegurar scalar strings)
+    hrc_template = (
+        hrc_template[
+            ~(
+                (hrc_template["Tipo de Documento"] == "Factura") &
+                (hrc_template["Referencia / Factura"].str.len() != 10)
+            )
+        ]
+        .reset_index(drop=True)
+    )
 
     # =====================================================
     # 11. Cálculo de diferencias

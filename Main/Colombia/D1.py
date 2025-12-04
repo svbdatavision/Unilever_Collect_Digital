@@ -133,6 +133,19 @@ def procesar(archivo_remittance,archivo_fbl5n):
     hrc_template = pd.merge(remittance, FBL5N, on="Referencia / Factura", how="left")
 #    hrc_template = merge_remittance_cartera(remittance, FBL5N)
 
+    # Parche
+    # Eliminar facturas mal cargadas
+    # (luego de normalizar y asegurar scalar strings)
+    hrc_template = (
+        hrc_template[
+            ~(
+                (hrc_template["Tipo de Documento"] == "Factura") &
+                (hrc_template["Referencia / Factura"].str.len() != 10)
+            )
+        ]
+        .reset_index(drop=True)
+    )
+
     # =====================================================
     # 8. Calculamos Diferencias entre Importe de factura - Importe de Remittance
     #    (logica centralizada en procesar_diferencias)

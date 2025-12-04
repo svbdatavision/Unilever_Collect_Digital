@@ -30,15 +30,26 @@ def procesar(archivos_remittance, archivo_fbl5n):
         "Monto pago": "Importe de Remittance"
     })
 
-    # Nueva columna con tipo simplificado
     remittance['Tipo de Documento'] = remittance['Tipo de Documento'].apply(
-        lambda x: 'Factura' if x.strip().upper() == 'FACTURA PROVEEDOR' else 'Nota de credito'
+        lambda x: 'Factura'
+        if isinstance(x, str) and x.strip().upper() == 'FACTURA PROVEEDOR'
+        else ('Factura' if str(x).strip().upper() == 'FACTURA PROVEEDOR' else 'Nota de credito')
     )
 
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
     hrc_template = merge_remittance_cartera(remittance, FBL5N)
     hrc_template = procesar_diferencias(hrc_template)
     hrc_template = procesamiento_nro(hrc_template, FBL5N)
+
+    if "Motivo del descuento" in hrc_template.columns:
+        mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("384")
+        if mask.any():
+            hrc_template.loc[mask, "Motivo del descuento"] = "WOB"
+
+    if "Motivo del descuento" in hrc_template.columns:
+        mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("987")
+        if mask.any():
+            hrc_template.loc[mask, "Motivo del descuento"] = "388"
 
     # Ajustar columnas finales
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
@@ -55,8 +66,6 @@ def procesar(archivos_remittance, archivo_fbl5n):
 
     # Datos adicionales
     numero_orden = ""
-    id_cliente = customer_id
-    nombre_cliente = "MEGA SANTAMARIA S A"
 
     # Guardar remittance temporal en Excel
     ruta_remittance_excel = os.path.join(os.path.dirname(archivos_remittance), "remittance_temp.xlsx")

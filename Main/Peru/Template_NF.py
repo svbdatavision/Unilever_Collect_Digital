@@ -95,8 +95,8 @@ def procesar(archivos_remittance, archivo_fbl5n):
             "Comentarios"
         ] = remittance["Referencia / Factura"].astype(str)
 
-                # Procesos adicionales
-        FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+        # Procesos adicionales
+        FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
         hrc_template = merge_remittance_cartera(remittance, FBL5N)
         hrc_template = procesar_diferencias(hrc_template)
         hrc_template = procesamiento_nro(hrc_template, FBL5N)
@@ -116,8 +116,6 @@ def procesar(archivos_remittance, archivo_fbl5n):
 
         # Datos adicionales
         numero_orden = ""
-        id_cliente = customer_id
-        nombre_cliente = "NORTFARMA S A C"
 
         # Guardar remittance temporal en Excel
         ruta_remittance_excel = os.path.join(os.path.dirname(archivos_remittance), "remittance_temp.xlsx")

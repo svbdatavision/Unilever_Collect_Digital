@@ -60,16 +60,5 @@ def merge_remittance_cartera(remittance, FBL5N):
             .str.replace(r"\s+", " ", regex=True)           # normaliza espacios
             .str.strip()
     )
-    # Eliminar facturas mal cargadas
-    # (luego de normalizar y asegurar scalar strings)
-    hrc_template = (
-        hrc_template[
-            ~(
-                (hrc_template["Tipo de Documento"] == "Factura") &
-                (hrc_template["Referencia / Factura"].str.len() != 10)
-            )
-        ]
-        .reset_index(drop=True)
-    )
     
     return hrc_template

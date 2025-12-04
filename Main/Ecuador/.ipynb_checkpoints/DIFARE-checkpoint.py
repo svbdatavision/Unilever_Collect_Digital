@@ -44,10 +44,15 @@ def procesar(archivos_remittance, archivo_fbl5n):
 
     remittance = pd.DataFrame(rows, columns=['Tipo de Documento', 'Referencia / Factura', 'Importe de Remittance'])
     # Procesos adicionales
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
     hrc_template = merge_remittance_cartera(remittance, FBL5N)
     hrc_template = procesar_diferencias(hrc_template)
     hrc_template = procesamiento_nro(hrc_template, FBL5N)
+
+    if "Motivo del descuento" in hrc_template.columns:
+        mask = hrc_template["Motivo del descuento"].astype(str).str.strip().eq("384")
+        if mask.any():
+            hrc_template.loc[mask, "Motivo del descuento"] = "WOB"
 
     # Ajustar columnas finales
     hrc_template["Pago Neto"] = hrc_template["Importe de factura"]
@@ -64,8 +69,6 @@ def procesar(archivos_remittance, archivo_fbl5n):
 
     # Datos adicionales
     numero_orden = ""
-    id_cliente = customer_id
-    nombre_cliente = "FDISTR FARM ECUATORIANA DIFARE"
 
     # Guardar remittance temporal en Excel
     ruta_remittance_excel = os.path.join(os.path.dirname(archivos_remittance), "remittance_temp.xlsx")
