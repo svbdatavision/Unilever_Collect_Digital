@@ -126,7 +126,7 @@ def procesar():
 # Lectura de la Cartera (FBL5N) (datos desde SAP)
 # =====================================================
  
-    FBL5N = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
+    FBL5N, id_cliente, nombre_cliente = procesar_cartera_cliente(rutas["fbl5n"], customer_id)
 
 # =====================================================
 #  Merge Remittance + FBL5N por "Referencia / Factura"
