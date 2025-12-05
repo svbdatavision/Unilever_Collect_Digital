@@ -9,6 +9,10 @@ from openpyxl import load_workbook
 
 from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
+# ESTOS CODIGOS NOS PERMITEN VER TODAS LAS FILAS Y LAS COLUMNAS. QUITAR AL MOMENTO DE PASAR A PRODUCCION
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
 # =====================================================
@@ -29,18 +33,16 @@ def procesar():
     root = _project_root()
 
     rutas = {
-        "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_olimpica.xlsx"),
-#        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N.xlsx"),
-        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_olimpica.xlsx"),
-        "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_olimpica.xlsx")
+        "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_nombre_cliente.xlsx"), # Completar nombre del Remittance (excel) a trabajar
+        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_nombre_cliente.xlsx"), # Completar nombre de la cartera (excel) a trabajar
+        "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_nombre_cliente.xlsx") # Colocar el nombre de salida que deseen (Ej: Template_HRC_nombre_cliente.xlsx)
     }
-    # Colocar el Customer ID del cliente
-    customer_id = 10266237
+    customer_id = 1 # Colocar el Customer ID del cliente
 
     # =====================================================
     # 3. Lectura de Remittance
     # =====================================================
-    # Leemos la tabla principal del Remittance: (ajustado a Excel)
+    """
     remittance = (
         pd.read_excel(
             rutas["remittance"], skiprows=21, nrows=2000,
@@ -48,88 +50,22 @@ def procesar():
         )
         .dropna(subset=["Código de Documento"])
     )
+    """
     # =====================================================
     # 4. Limpieza de Remittance
     # =====================================================
-    # Garantizar tipo string para búsquedas textuales
-    remittance["Código de Documento"] = remittance["Código de Documento"].astype(str)
-
-    # Eliminar filas de totales que suelen venir en el footer del Excel
-    remittance = remittance[~remittance["Código de Documento"].str.contains("Total", case=False, na=False)]
-
-    # Renombrado estándar para trabajar con los mismos nombres en todo el flujo
-    remittance = remittance.rename(columns={
-        "Código de Documento": "Tipo de Documento",
-        "No. Doc": "Referencia / Factura",
-        "Total a Pagar": "Importe de Remittance"
-    })
-
-    # Normalizar referencia (ej: eliminar sufijos/últimos 3 caracteres si corresponde) y cuando aparezca "CP" o "CD"
-    remittance["Referencia / Factura"] = (
-        remittance["Referencia / Factura"]
-        .astype(str)
-        .str[0:-3]
-        .str.replace("CP", "", regex=False)
-    )
-
     
-    # Mapear códigos a nombres Tipo de Documento"
-    remittance["Tipo de Documento"] = remittance["Tipo de Documento"].replace({
-        "380": "Factura",
-        "381": "Descuentos Cliente"
-    })
-
-    # Normalizar: quitar separador de miles y estandarizar decimales
-    remittance["Importe de Remittance"] = (
-        remittance["Importe de Remittance"]
-        .astype(str)                     # aseguramos string antes de manipular
-        .str.replace(".", "", regex=False)  # quitar puntos de miles
-        .str.replace(",", ".", regex=False) # convertir coma decimal a punto
-        .astype(float)                   # convertir a float
-        .round(2)
-    )
-    
-    # Sumamos los Importes, cuando las Facturas son las mismas
-    # Solo facturas: agrupamos y sumamos 'Importe de Remittance'
-    facturas_agrupadas = (
-        remittance[remittance['Tipo de Documento'] == 'Factura']
-        .groupby('Referencia / Factura', as_index=False)
-        .agg({
-            'Importe de Remittance': 'sum',
-            'Tipo de Documento': 'first',  # conserva 'Factura'
-        })
-    )
-    # Registros que no son factura
-    no_facturas = remittance[remittance['Tipo de Documento'] != 'Factura']
-    # concat
-    remittance = pd.concat([facturas_agrupadas, no_facturas], ignore_index=True)
-
-
-    # Asegurar la existencia de columnas que usaremos más adelante
-    for col in ["Descuento", "Motivo del descuento"]:
-        if col not in remittance.columns:
-            remittance[col] = ""
-
     # =====================================================
     # 5. Manejo de Reglas y CARDs
     # =====================================================  
-    conds = [
-        (remittance["Referencia / Factura"].str.startswith("PMP", na=False)) & (remittance["Importe de Remittance"] < 0),
-        remittance["Referencia / Factura"].str.startswith("0085", na=False),
-        remittance["Referencia / Factura"].str.startswith("46", na=False),
-        remittance["Referencia / Factura"].str.startswith("98", na=False),
-        remittance["Referencia / Factura"].str.startswith("310", na=False)
-    ]
-    descuentos = ["RECHAZO", "DESCUENTO", "AVERIA", "FACT PROVEEDOR", "NOTA DEBITO"]
-    motivos = ["551", "987", "522", "CSB", "987"]
-
-    # Aplicar reglas de descuento y motivo
-    remittance["Descuento"] = np.select(conds, descuentos, default=remittance["Descuento"])
-    remittance["Motivo del descuento"] = np.select(conds, motivos, default=remittance["Motivo del descuento"])
-
+    
+    
+    # UNA VEZ QUE VEIFIQUEN QUE YA LOGRARON LEER CORRECTAMENTE, DESCOMENTAR LAS FUNCIONES Y EJECUTARLO.
+    """
     # =====================================================
     # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
     # =====================================================
+    
     
     remittance = procesar_descuentos_y_comentarios(remittance)
 
@@ -197,4 +133,16 @@ def procesar():
         ruta_salida=rutas["salida"]
     )
 
-    return hrc_template
+    return hrc_template"""
+    
+    # SALIDAS PARA PRUEBAS
+    remittance.to_excel(rutas["salida"], index=False)
+    
+    print("\n📌 Tipos de datos del Remittance:")
+    print(remittance.dtypes)
+
+    print("\n📌 Tabla:")
+    print(remittance)
+
+    remittance.to_excel(rutas["salida"], index=False)
+    return remittance

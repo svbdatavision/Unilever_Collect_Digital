@@ -8,12 +8,22 @@ from clientes.Colombia import (
     Cencosud,
     copi,
     Euro,
-    oxxo
+    oxxo,
+    Prueba
 )
+
 from clientes.Ecuador import (
     El_Rosado,
-    TIA
+    Prueba
 )
+from clientes.Peru import (
+    Template_Cencosud,
+    Template_NF,
+    Template_SPSA,
+    Template_Tottus,
+    Prueba
+)
+
 
 # =====================================================
 # Registro de clientes por país
@@ -26,11 +36,19 @@ CLIENTES = {
         "Cencosud": Cencosud.procesar,
         "Copidrogas": copi.procesar,
         "Euro": Euro.procesar,
-        "Oxxo": oxxo.procesar
+        "Oxxo": oxxo.procesar,
+        "Prueba": Prueba.procesar
     },
     "Ecuador": {
         "El Rosado": El_Rosado.procesar,
-        "TIA": TIA.procesar
+        "Prueba": Prueba.procesar
+    },
+    "Peru": {
+        "Cencosud Peru": Template_Cencosud.procesar,
+        "NF": Template_NF.procesar,
+        "SPSA": Template_SPSA.procesar,
+        "Template_Tottus": Template_Tottus.procesar,
+        "Prueba": Prueba.procesar
     }
 }
 
