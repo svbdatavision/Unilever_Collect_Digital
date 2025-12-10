@@ -18,7 +18,8 @@ from Colombia import (
     farmatodo,
     olimpica,
     Euro,
-    oxxo
+    oxxo,
+    Cruz_Verde
 )
 from Ecuador import (
     Favorita, 
@@ -54,7 +55,8 @@ clientes_por_pais = {
         "Farmatodo",
         "Olimpica",
         "Euro",
-        "Oxxo"
+        "Oxxo",
+        "Cruz Verde"
     ],
     "Ecuador": [
         "Favorita", 
@@ -81,6 +83,7 @@ procesadores = {
     "Olimpica": olimpica,
     "Euro": Euro,
     "Oxxo": oxxo,
+    "Cruz Verde": Cruz_Verde,
     # Ecuador
     "Favorita": Favorita,
     "FARCOMED": FARCOMED,
