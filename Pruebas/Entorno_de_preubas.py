@@ -9,19 +9,19 @@ from clientes.Colombia import (
     copi,
     Euro,
     oxxo,
-    Prueba
+    Prueba_Colombia
 )
 
 from clientes.Ecuador import (
     El_Rosado,
-    Prueba
+    Prueba_Ecuador
 )
 from clientes.Peru import (
     Template_Cencosud,
     Template_NF,
     Template_SPSA,
     Template_Tottus,
-    Prueba
+    Prueba_Peru
 )
 
 
@@ -37,18 +37,18 @@ CLIENTES = {
         "Copidrogas": copi.procesar,
         "Euro": Euro.procesar,
         "Oxxo": oxxo.procesar,
-        "Prueba": Prueba.procesar
+        "Prueba": Prueba_Colombia.procesar
     },
     "Ecuador": {
         "El Rosado": El_Rosado.procesar,
-        "Prueba": Prueba.procesar
+        "Prueba": Prueba_Ecuador.procesar
     },
     "Peru": {
         "Cencosud Peru": Template_Cencosud.procesar,
         "NF": Template_NF.procesar,
         "SPSA": Template_SPSA.procesar,
         "Template_Tottus": Template_Tottus.procesar,
-        "Prueba": Prueba.procesar
+        "Prueba": Prueba_Peru.procesar
     }
 }
 

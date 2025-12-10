@@ -33,8 +33,8 @@ def procesar():
     root = _project_root()
 
     rutas = {
-        "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_nombre_cliente.xlsx"), # Completar nombre del Remittance (excel) a trabajar
-        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_nombre_cliente.xlsx"), # Completar nombre de la cartera (excel) a trabajar
+        "remittance": os.path.join(root,"Archivos", "Remittance", "Colombia", "Remittance_olimpica.xlsx"), # Completar nombre del Remittance (excel) a trabajar
+        "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_olimpica.xlsx"), # Completar nombre de la cartera (excel) a trabajar
         "salida": os.path.join(root,"Archivos", "Template", "Colombia", "Template_HRC_nombre_cliente.xlsx") # Colocar el nombre de salida que deseen (Ej: Template_HRC_nombre_cliente.xlsx)
     }
     customer_id = 1 # Colocar el Customer ID del cliente
@@ -42,7 +42,7 @@ def procesar():
     # =====================================================
     # 3. Lectura de Remittance
     # =====================================================
-    """
+    
     remittance = (
         pd.read_excel(
             rutas["remittance"], skiprows=21, nrows=2000,
@@ -50,7 +50,7 @@ def procesar():
         )
         .dropna(subset=["Código de Documento"])
     )
-    """
+    
     # =====================================================
     # 4. Limpieza de Remittance
     # =====================================================
@@ -144,5 +144,4 @@ def procesar():
     print("\n📌 Tabla:")
     print(remittance)
 
-    remittance.to_excel(rutas["salida"], index=False)
     return remittance
