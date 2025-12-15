@@ -12,6 +12,7 @@ from tkinter import messagebox
 customer_id = 10299933
 
 # Ruta del archivo PDF
+# Ruta del archivo PD1
 archivos_remittance = r"C:\Users\Omar.Tuesta\Unilever\Codigos - Documents\Automatizaciones MT\Template\Main\Facturas pagadas a proveedor.PDF"
 archivo_fbl5n = r"C:\Users\Omar.Tuesta\Unilever\Codigos - Documents\Automatizaciones MT\Template\Main\FBL5N - copia.xlsx"
 TIPO_MAP = {
