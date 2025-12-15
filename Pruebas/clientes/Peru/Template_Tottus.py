@@ -9,7 +9,8 @@ from clientes.utils import *
 from tkinter import messagebox
 
 # =====================================================
-# 1. Localización dinámica de la carpeta raíz del proyecto
+# 111. Localización dinámica de la carpeta raíz del proyecto
+
 # =====================================================
 def _project_root():
     if getattr(sys, "frozen", False):
