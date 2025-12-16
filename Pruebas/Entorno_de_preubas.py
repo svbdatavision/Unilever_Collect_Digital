@@ -9,6 +9,7 @@ from clientes.Colombia import (
     copi,
     Euro,
     oxxo,
+    Jeronimo,
     Prueba_Colombia
 )
 
@@ -37,6 +38,7 @@ CLIENTES = {
         "Copidrogas": copi.procesar,
         "Euro": Euro.procesar,
         "Oxxo": oxxo.procesar,
+        "Jeronimo": Jeronimo.procesar,
         "Prueba": Prueba_Colombia.procesar
     },
     "Ecuador": {
