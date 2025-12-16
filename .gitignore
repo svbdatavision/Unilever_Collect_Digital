@@ -30,13 +30,7 @@ $RECYCLE.BIN/
 ~$*.xls
 
 # ========================
-# Data / experiments
-# ========================
-Pruebas/
-data/
-
-# ========================
-# Images (datasets / outputs)
+# Images
 # ========================
 *.jpg
 *.jpeg
@@ -44,9 +38,3 @@ data/
 *.bmp
 *.tiff
 *.gif
-
-# ========================
-# Allow assets (versioned images)
-# ========================
-!Main/assets/
-!Main/assets/**
