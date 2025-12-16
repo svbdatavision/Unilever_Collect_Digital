@@ -1,0 +1,52 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+
+# ========================
+# Jupyter
+# ========================
+.ipynb_checkpoints/
+.jupyter/
+
+# ========================
+# macOS
+# ========================
+.DS_Store
+
+# ========================
+# Windows
+# ========================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ========================
+# Office temp files
+# ========================
+~$*.xlsx
+~$*.xls
+
+# ========================
+# Data / experiments
+# ========================
+Pruebas/
+data/
+
+# ========================
+# Images (datasets / outputs)
+# ========================
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tiff
+*.gif
+
+# ========================
+# Allow assets (versioned images)
+# ========================
+!Main/assets/
+!Main/assets/**
