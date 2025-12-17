@@ -26,7 +26,7 @@ from clientes.Peru import (
     Template_SPSA,
     Template_Tottus,
     Prueba_Peru_xlsx,
-    Prueba_Colombia_pdf
+    Prueba_Peru_pdf
 )
 
 # Registro de clientes por país
