@@ -84,7 +84,14 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "Nro Factura": "Referencia / Factura",
         "Total": "Importe de Remittance"
     })
-    remittance["Importe de Remittance"] = pd.to_numeric(remittance["Importe de Remittance"], errors="coerce").round(2)
+    remittance["Importe de Remittance"] = (
+        remittance["Importe de Remittance"]
+        .astype(str)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+        .astype(float)
+        .round(2)
+    )
     # Limpiar caracteres invisibles
     remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.replace(r"[\u202A-\u202E\u200E\u200F]", "", regex=True).str.strip()
 
