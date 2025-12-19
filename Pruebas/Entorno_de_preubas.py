@@ -1,6 +1,8 @@
 import pandas as pd
 import tkinter as tk
 from tkinter import ttk, messagebox
+import config
+
 # Importar codigos de clientes
 from clientes.Colombia import (
     olimpica,
@@ -64,6 +66,9 @@ CLIENTES = {
 def procesar_cliente():
     pais = combo_pais.get()
     cliente = combo_cliente.get()
+
+    # 👇 DEFINIR PAÍS UNA SOLA VEZ
+    config.pais_actual = pais
 
     if not pais or not cliente:
         messagebox.showwarning("Advertencia", "Seleccione un país y un cliente antes de procesar.")
