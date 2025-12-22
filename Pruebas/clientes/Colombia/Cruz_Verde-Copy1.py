@@ -45,26 +45,42 @@ def procesar():
     # =====================================================
     # 3. Lectura de Remittance desde imagen (OCR)
     # =====================================================
-    from clientes.utils.ocr_utils import ocr_from_image_bytes
+    image_path = rutas["remittance"]
+    img = Image.open(image_path)
 
+    raw_text = pytesseract.image_to_string(img, lang="spa")
+    lines = raw_text.split("\n")
+
+    facturas = []
+    importes = []
+
+    # Regex para capturar número de factura
     regex_fact = r"\b(PMP\d+|NCMI\d+)\b"
+
+    # Regex para capturar importes
     regex_importe = r"\(?\d{1,3}(?:,\d{3})+\)?"
 
-    with open(rutas["remittance"], "rb") as f:
-        image_bytes = f.read()
+    for line in lines:
+        mf = re.search(regex_fact, line)
+        mi = re.search(regex_importe, line)
 
-    df_ocr = ocr_from_image_bytes(
-        image_bytes=image_bytes,
-        factura_regex=regex_fact,
-        importe_regex=regex_importe,
-        lang="spa",
-        psm=6
-    )
+        if mf and mi:
+            facturas.append(mf.group(0))
+            importes.append(mi.group(0))
+
+    # ---------- Limpieza de importes ----------
+    def limpiar_importe(x):
+        x = x.replace(",", "")
+        if x.startswith("(") and x.endswith(")"):
+            return -int(x.strip("()"))
+        return int(x)
+
+    importes_limpios = [limpiar_importe(i) for i in importes]
 
     # ---------- DataFrame remittance formato estándar ----------
-    remittance = df_ocr.rename(columns={
-        "factura": "Referencia / Factura",
-        "importe": "Importe de Remittance"
+    remittance = pd.DataFrame({
+        "Referencia / Factura": facturas,
+        "Importe de Remittance": importes_limpios
     })
     
     # 2.1 Guardar Remittance en buffer en memoria
@@ -96,11 +112,7 @@ def procesar():
         .astype(str)
     )
 
-    remittance["Importe de Remittance"] = (
-        pd.to_numeric(remittance["Importe de Remittance"], errors="coerce")
-        .fillna(0.0)
-    )
-
+    remittance["Importe de Remittance"] = remittance["Importe de Remittance"].astype(float)
 
     # =====================================================
     # 5. Manejo de Reglas y CARDs
