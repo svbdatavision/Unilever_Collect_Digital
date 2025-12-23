@@ -58,7 +58,7 @@ clientes_por_pais = {
         "Euro",
         "Oxxo",
 #        "Cruz Verde",
-        "Jeronimo",
+        "Jeronimo"
     ],
     "Ecuador": [
         "Favorita", 
@@ -86,7 +86,7 @@ procesadores = {
     "Euro": Euro,
     "Oxxo": oxxo,
 #    "Cruz Verde": Cruz_Verde,
-    "Jeronimo": jeronimo
+    "Jeronimo": jeronimo,
     # Ecuador
     "Favorita": Favorita,
     "FARCOMED": FARCOMED,

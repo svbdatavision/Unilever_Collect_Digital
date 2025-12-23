@@ -10,7 +10,7 @@ import re
 import pdfplumber
 import io
 
-from clientes.utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
+from utils import *  # Importación de funciones utilitarias del paquete interno 'clientes'
 
 # =====================================================
 # 1. Localización dinámica de la carpeta raíz del proyecto
@@ -28,7 +28,7 @@ def _project_root():
 # =====================================================
 # 2. Función principal del proceso (procesar)
 # =====================================================
-def procesar():
+def procesar(archivo_remittance,archivo_fbl5n):
     root = _project_root()
 
     rutas = {
