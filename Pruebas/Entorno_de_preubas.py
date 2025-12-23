@@ -12,6 +12,7 @@ from clientes.Colombia import (
     copi,
     Euro,
     oxxo,
+    Cruz_Verde,
     Jeronimo,
     Prueba_Colombia_xlsx,
     Prueba_Colombia_pdf
@@ -41,6 +42,7 @@ CLIENTES = {
         "Copidrogas": copi.procesar,
         "Euro": Euro.procesar,
         "Oxxo": oxxo.procesar,
+        "Cruz_Verde": Cruz_Verde.procesar,
         "Jeronimo": Jeronimo.procesar,
         "Prueba xlsx": Prueba_Colombia_xlsx.procesar,
         "Prueba pdf": Prueba_Colombia_pdf.procesar
