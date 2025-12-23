@@ -19,7 +19,8 @@ from Colombia import (
     olimpica,
     Euro,
     oxxo,
-    Cruz_Verde
+    Cruz_Verde,
+    jeronimo
 )
 from Ecuador import (
     Favorita, 
@@ -56,7 +57,8 @@ clientes_por_pais = {
         "Olimpica",
         "Euro",
         "Oxxo",
-        "Cruz Verde"
+        "Cruz Verde",
+        "Jeronimo"
     ],
     "Ecuador": [
         "Favorita", 
@@ -84,6 +86,7 @@ procesadores = {
     "Euro": Euro,
     "Oxxo": oxxo,
     "Cruz Verde": Cruz_Verde,
+    "Jeronimo": jeronimo
     # Ecuador
     "Favorita": Favorita,
     "FARCOMED": FARCOMED,

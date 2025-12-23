@@ -40,7 +40,7 @@ def procesar():
         "fbl5n": os.path.join(root,"Archivos", "Cartera", "FBL5N_nombre_cliente.xlsx"), # Completar nombre de la cartera (excel) a trabajar
         "salida": os.path.join(root,"Archivos", "Template", "Ecuador", "Template_HRC_nombre_cliente.xlsx") # Colocar el nombre de salida que deseen (Ej: Template_HRC_nombre_cliente.xlsx)
     }
-    customer_id =  # Colocar el Customer ID del cliente
+    customer_id = 1 # Colocar el Customer ID del cliente
 
     # =====================================================
     # 3. Lectura de Remittance
