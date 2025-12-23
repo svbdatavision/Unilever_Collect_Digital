@@ -58,7 +58,7 @@ clientes_por_pais = {
         "Euro",
         "Oxxo",
         "Cruz Verde",
-        "Jeronimo"
+        "Jeronimo",
     ],
     "Ecuador": [
         "Favorita", 
