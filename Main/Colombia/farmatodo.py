@@ -84,14 +84,28 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "Nro Factura": "Referencia / Factura",
         "Total": "Importe de Remittance"
     })
+    
+    # Esta función nos sirve para trabajar los valores numericos sin importar el formato con el cual nos los pasan.
+    def normalize_amount(x):
+        x = str(x)
+
+        # Caso 1: tiene coma y punto → formato europeo (1.234.567,89)
+        if "," in x and "." in x:
+            x = x.replace(".", "").replace(",", ".")
+        # Caso 2: solo coma → decimal con coma (1234,56)
+        elif "," in x:
+            x = x.replace(",", ".")
+        # Caso 3: solo punto → decimal con punto (1234.56)
+        # No se hace nada
+
+        return float(x)
+
     remittance["Importe de Remittance"] = (
         remittance["Importe de Remittance"]
-        .astype(str)
-        .str.replace(".", "", regex=False)
-        .str.replace(",", ".", regex=False)
-        .astype(float)
+        .apply(normalize_amount)
         .round(2)
     )
+    
     # Limpiar caracteres invisibles
     remittance["Referencia / Factura"] = remittance["Referencia / Factura"].str.replace(r"[\u202A-\u202E\u200E\u200F]", "", regex=True).str.strip()
 

@@ -127,11 +127,9 @@ def procesar(archivo_remittance,archivo_fbl5n):
         "DESCUENTO CLIENTE " + remittance.loc[mask, "Referencia / Factura"]
     )
     
-    
     # =====================================================
     # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
     # =====================================================
-    
     
     remittance = procesar_descuentos_y_comentarios(remittance)
 
