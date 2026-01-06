@@ -77,6 +77,19 @@ def procesar(archivo_remittance,archivo_fbl5n):
 
     remittance = pd.DataFrame(rows)
     
+
+    # Aplicar signo negativo de forma vectorizada
+    cond_ncm = remittance["N. Documento"].str.upper().str.contains("NCM", na=False)
+    cond_000 = remittance["N. Documento"].str.startswith("000", na=False)
+    cond = cond_ncm | cond_000
+
+    # Anteponer '-' a los montos que califican (evitar doble signo)
+    remittance.loc[cond, "Importe de pago"] = (
+        remittance.loc[cond, "Importe de pago"].astype(str).apply(
+            lambda x: x if x.startswith("-") else "-" + x.lstrip("+")
+        )
+    )
+
    # 2.1 Guardar Remittance en buffer en memoria
     remittance_buffer = io.BytesIO()
     with pd.ExcelWriter(remittance_buffer, engine="openpyxl") as writer:
@@ -126,7 +139,7 @@ def procesar(archivo_remittance,archivo_fbl5n):
     remittance.loc[mask, "Comentarios"] = (
         "DESCUENTO CLIENTE " + remittance.loc[mask, "Referencia / Factura"]
     )
-    
+
     # =====================================================
     # 6. Procesamiento de columnas 'Descuento' y 'Comentarios'
     # =====================================================
